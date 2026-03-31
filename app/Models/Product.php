@@ -28,6 +28,11 @@ class Product extends Model
         return $this->hasMany(ProductRoll::class);
     }
 
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
     public function getTotalStockAttribute(): float
     {
         return $this->rolls()->sum('area');

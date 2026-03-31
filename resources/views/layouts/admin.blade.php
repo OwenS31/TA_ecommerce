@@ -40,6 +40,24 @@
                     </svg>
                     Produk
                 </a>
+                <a href="{{ route('admin.orders.index') }}"
+                    class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm {{ request()->routeIs('admin.orders.*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }} transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+                        </path>
+                    </svg>
+                    Pesanan
+                </a>
+                <a href="{{ route('admin.cutting-optimization.index') }}"
+                    class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm {{ request()->routeIs('admin.cutting-optimization.*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }} transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 8h10M7 12h8m-8 4h6M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z">
+                        </path>
+                    </svg>
+                    Optimasi Potong
+                </a>
             </nav>
         </aside>
 
