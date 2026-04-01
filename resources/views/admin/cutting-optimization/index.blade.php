@@ -15,7 +15,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div class="bg-white rounded-xl border border-gray-200 p-4">
             <p class="text-xs text-gray-500">Pesanan Dibayar</p>
             <p class="text-2xl font-bold text-gray-900 mt-1">{{ $orders->count() }}</p>
@@ -23,14 +23,6 @@
         <div class="bg-white rounded-xl border border-gray-200 p-4">
             <p class="text-xs text-gray-500">Segmen Potong</p>
             <p class="text-2xl font-bold text-gray-900 mt-1">{{ $demandsCount }}</p>
-        </div>
-        <div class="bg-white rounded-xl border border-gray-200 p-4">
-            <p class="text-xs text-gray-500">Material Terpakai</p>
-            <p class="text-2xl font-bold text-green-700 mt-1">{{ number_format($usedPercent, 2, ',', '.') }}%</p>
-        </div>
-        <div class="bg-white rounded-xl border border-gray-200 p-4">
-            <p class="text-xs text-gray-500">Material Sisa</p>
-            <p class="text-2xl font-bold text-red-700 mt-1">{{ number_format($wastePercent, 2, ',', '.') }}%</p>
         </div>
     </div>
 

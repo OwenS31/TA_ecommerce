@@ -23,7 +23,7 @@ class LoginController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email'    => ['required', 'email'],
+            'email' => ['required', 'email'],
             'password' => ['required'],
         ]);
 
@@ -32,6 +32,16 @@ class LoginController extends Controller
 
             /** @var User $user */
             $user = Auth::user();
+
+            if (!$user->is_active) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return back()->withErrors([
+                    'email' => 'Akun Anda sedang dinonaktifkan. Silakan hubungi admin.',
+                ])->onlyInput('email');
+            }
 
             // Redirect based on role
             if ($user->isAdmin()) {

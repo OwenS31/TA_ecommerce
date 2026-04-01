@@ -58,6 +58,35 @@
                     </svg>
                     Optimasi Potong
                 </a>
+                <a href="{{ route('admin.users.index') }}"
+                    class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm {{ request()->routeIs('admin.users.*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }} transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z">
+                        </path>
+                    </svg>
+                    Pengguna
+                </a>
+                <a href="{{ route('admin.reports.index') }}"
+                    class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm {{ request()->routeIs('admin.reports.*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }} transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 17v-6m3 6V7m3 10v-4m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    Laporan
+                </a>
+                <a href="{{ route('admin.settings.index') }}"
+                    class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm {{ request()->routeIs('admin.settings.*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white' }} transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11.049 2.927c.3-1.14 1.603-1.14 1.902 0a1 1 0 001.519.63c.994-.57 2.167.603 1.597 1.597a1 1 0 00.63 1.519c1.14.3 1.14 1.603 0 1.902a1 1 0 00-.63 1.519c.57.994-.603 2.167-1.597 1.597a1 1 0 00-1.519.63c-.3 1.14-1.603 1.14-1.902 0a1 1 0 00-1.519-.63c-.994.57-2.167-.603-1.597-1.597a1 1 0 00-.63-1.519c-1.14-.3-1.14-1.603 0-1.902a1 1 0 00.63-1.519c-.57-.994.603-2.167 1.597-1.597a1 1 0 001.519-.63z">
+                        </path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 8a4 4 0 100 8 4 4 0 000-8z"></path>
+                    </svg>
+                    Pengaturan
+                </a>
             </nav>
         </aside>
 

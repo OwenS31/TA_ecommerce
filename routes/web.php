@@ -4,6 +4,9 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\CuttingOptimizationController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\ReportController;
+use App\Http\Controllers\Admin\SettingController;
+use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -76,4 +79,19 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     // Cutting Optimization
     Route::get('/cutting-optimization', [CuttingOptimizationController::class, 'index'])->name('cutting-optimization.index');
     Route::get('/cutting-optimization/export', [CuttingOptimizationController::class, 'exportCsv'])->name('cutting-optimization.export');
+
+    // Users
+    Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
+    Route::get('/users/{user}', [UserManagementController::class, 'show'])->name('users.show');
+    Route::patch('/users/{user}/toggle-active', [UserManagementController::class, 'toggleActive'])->name('users.toggle-active');
+
+    // Reports
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('/reports/export-excel', [ReportController::class, 'exportExcel'])->name('reports.export-excel');
+
+    // Settings
+    Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+    Route::patch('/settings/profile', [SettingController::class, 'updateProfile'])->name('settings.update-profile');
+    Route::patch('/settings/password', [SettingController::class, 'updatePassword'])->name('settings.update-password');
+    Route::patch('/settings/store', [SettingController::class, 'updateStore'])->name('settings.update-store');
 });
