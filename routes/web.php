@@ -19,9 +19,8 @@ use Illuminate\Support\Facades\Route;
 | Public Routes
 |--------------------------------------------------------------------------
 */
-Route::get('/', function () {
-    return view('welcome');
-})->name('welcome');
+Route::get('/', [HomeController::class, 'index'])->name('home');
+Route::get('/katalog', [HomeController::class, 'catalog'])->name('catalog');
 
 /*
 |--------------------------------------------------------------------------
@@ -55,8 +54,11 @@ Route::middleware('auth')->group(function () {
     // Logout
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
-    // User Home
-    Route::get('/home', [HomeController::class, 'index'])->name('home');
+    // User Pages
+    Route::get('/home', [HomeController::class, 'index']);
+    Route::get('/riwayat-pesanan', [HomeController::class, 'history'])->name('history');
+    Route::get('/profil', [HomeController::class, 'profile'])->name('profile');
+    Route::get('/keranjang', [HomeController::class, 'cart'])->name('cart');
 });
 
 /*
