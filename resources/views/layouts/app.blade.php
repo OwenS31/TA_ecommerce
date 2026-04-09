@@ -31,8 +31,8 @@
                         <a href="{{ route('catalog') }}"
                             class="px-4 py-2 text-sm font-medium rounded-full {{ request()->routeIs('catalog') ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100' }}">Katalog</a>
                         @auth
-                            <a href="{{ route('history') }}"
-                                class="px-4 py-2 text-sm font-medium rounded-full {{ request()->routeIs('history') ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100' }}">Riwayat
+                            <a href="{{ route('orders.index') }}"
+                                class="px-4 py-2 text-sm font-medium rounded-full {{ request()->routeIs('orders.index') ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100' }}">Riwayat
                                 Pesanan</a>
                             <a href="{{ route('profile') }}"
                                 class="px-4 py-2 text-sm font-medium rounded-full {{ request()->routeIs('profile') ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100' }}">Profil</a>

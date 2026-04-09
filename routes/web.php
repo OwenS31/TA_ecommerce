@@ -20,7 +20,9 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 Route::get('/', [HomeController::class, 'index'])->name('home');
-Route::get('/katalog', [HomeController::class, 'catalog'])->name('catalog');
+Route::get('/products', [HomeController::class, 'catalog'])->name('catalog');
+Route::get('/katalog', fn() => redirect()->route('catalog'));
+Route::get('/products/{product}', [HomeController::class, 'show'])->name('product.show');
 
 /*
 |--------------------------------------------------------------------------
@@ -56,9 +58,24 @@ Route::middleware('auth')->group(function () {
 
     // User Pages
     Route::get('/home', [HomeController::class, 'index']);
-    Route::get('/riwayat-pesanan', [HomeController::class, 'history'])->name('history');
-    Route::get('/profil', [HomeController::class, 'profile'])->name('profile');
-    Route::get('/keranjang', [HomeController::class, 'cart'])->name('cart');
+
+    Route::get('/cart', [HomeController::class, 'cart'])->name('cart');
+    Route::post('/cart/{product}', [HomeController::class, 'addToCart'])->name('cart.add');
+    Route::patch('/cart/{cartKey}', [HomeController::class, 'updateCart'])->name('cart.update');
+    Route::delete('/cart/{cartKey}', [HomeController::class, 'removeCartItem'])->name('cart.remove');
+    Route::get('/keranjang', fn() => redirect()->route('cart'));
+
+    Route::get('/checkout', [HomeController::class, 'checkout'])->name('checkout');
+    Route::post('/checkout', [HomeController::class, 'storeCheckout'])->name('checkout.store');
+
+    Route::get('/orders', [HomeController::class, 'ordersIndex'])->name('orders.index');
+    Route::get('/orders/{order}', [HomeController::class, 'showOrder'])->name('orders.show');
+    Route::get('/riwayat-pesanan', fn() => redirect()->route('orders.index'));
+
+    Route::get('/profile', [HomeController::class, 'profile'])->name('profile');
+    Route::patch('/profile', [HomeController::class, 'updateProfile'])->name('profile.update');
+    Route::patch('/profile/password', [HomeController::class, 'updatePassword'])->name('profile.password');
+    Route::get('/profil', fn() => redirect()->route('profile'));
 });
 
 /*

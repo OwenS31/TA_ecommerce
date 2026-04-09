@@ -172,17 +172,8 @@
                 </div>
                 <div
                     class="rounded-4xl border border-slate-200 bg-slate-100 overflow-hidden min-h-85 flex items-center justify-center">
-                    <div class="text-center p-10">
-                        <div
-                            class="w-20 h-20 mx-auto rounded-3xl bg-slate-900 text-white flex items-center justify-center mb-4">
-                            <svg class="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M4 16l4-4a2 2 0 012.828 0L16 17m-2-2l2-2a2 2 0 012.828 0L20 17m-8-11h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                        </div>
-                        <p class="text-lg font-bold text-slate-900">Foto Gudang / Toko</p>
-                        <p class="text-sm text-slate-500 mt-2">Placeholder jika foto asli belum tersedia.</p>
-                    </div>
+                    <img src="/storage/products/Tempat_terpal.jpg" alt="Foto Gudang"
+                        class="h-full w-full object-cover object-center">
                 </div>
             </div>
         </div>
@@ -218,15 +209,21 @@
                 <h2 class="text-3xl font-black text-slate-950">Galeri Produk Kami</h2>
             </div>
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                @for ($i = 1; $i <= 8; $i++)
-                    <div
-                        class="aspect-4/3 rounded-3xl border border-slate-200 bg-[linear-gradient(135deg,rgba(15,23,42,0.2),rgba(14,165,233,0.12)),linear-gradient(120deg,#cbd5e1,#f8fafc)] flex items-end p-4">
-                        <div>
-                            <p class="text-xs uppercase tracking-[0.2em] text-slate-700 font-semibold">Placeholder</p>
-                            <p class="text-sm font-bold text-slate-900">Foto {{ $i }}</p>
-                        </div>
+                @php
+                    $galleryImages = [
+                        'products/Foto_proses1.jpg',
+                        'products/Foto_proses2.jpg',
+                        'products/Foto_proses3.jpg',
+                        'products/Foto_tumpukan_terpal.jpg',
+                    ];
+                @endphp
+
+                @foreach ($galleryImages as $image)
+                    <div class="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-sm">
+                        <img src="{{ asset('storage/' . $image) }}" alt="Galeri Produk"
+                            class="aspect-4/3 w-full object-cover object-center">
                     </div>
-                @endfor
+                @endforeach
             </div>
         </div>
     </section>
