@@ -24,8 +24,12 @@
                     </div>
                     <div>
                         <p class="text-gray-500">Status Pembayaran</p>
-                        <p class="font-semibold text-gray-900">{{ ucwords(str_replace('_', ' ', $order->payment_status)) }}
+                        <p class="font-semibold text-gray-900">{{ $order->paymentStatusLabel() }}
                         </p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500">Metode Pembayaran</p>
+                        <p class="font-semibold text-gray-900">{{ $order->paymentMethodLabel() ?? '-' }}</p>
                     </div>
                     <div>
                         <p class="text-gray-500">Status Pesanan</p>

@@ -56,7 +56,7 @@
                                         {{ $order->items->pluck('product_name')->join(', ') }}</td>
                                     <td class="px-4 py-3">Rp {{ number_format((float) $order->total_amount, 0, ',', '.') }}
                                     </td>
-                                    <td class="px-4 py-3">{{ str_replace('_', ' ', $order->payment_status) }}</td>
+                                    <td class="px-4 py-3">{{ $order->paymentStatusLabel() }}</td>
                                     <td class="px-4 py-3">{{ str_replace('_', ' ', $order->order_status) }}</td>
                                     <td class="px-4 py-3">
                                         <a href="{{ route('orders.show', $order) }}"

@@ -79,7 +79,7 @@
                                 {{ number_format($order->total_amount, 0, ',', '.') }}</td>
                             <td class="px-4 py-3">
                                 <span class="inline-flex px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700">
-                                    {{ ucwords(str_replace('_', ' ', $order->payment_status)) }}
+                                    {{ $order->paymentMethodLabel() ?? $order->paymentStatusLabel() }}
                                 </span>
                             </td>
                             <td class="px-4 py-3">

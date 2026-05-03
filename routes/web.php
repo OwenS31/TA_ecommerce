@@ -23,6 +23,7 @@ Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/products', [HomeController::class, 'catalog'])->name('catalog');
 Route::get('/katalog', fn() => redirect()->route('catalog'));
 Route::get('/products/{product}', [HomeController::class, 'show'])->name('product.show');
+Route::post('/payments/midtrans/notification', [HomeController::class, 'midtransNotification'])->name('payments.midtrans.notification');
 
 /*
 |--------------------------------------------------------------------------
@@ -70,6 +71,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/orders', [HomeController::class, 'ordersIndex'])->name('orders.index');
     Route::get('/orders/{order}', [HomeController::class, 'showOrder'])->name('orders.show');
+    Route::get('/orders/{order}/snap-token', [HomeController::class, 'snapToken'])->name('orders.snap-token');
+    Route::get('/orders/{order}/sync-midtrans-status', [HomeController::class, 'syncMidtransStatus'])->name('orders.sync-midtrans-status');
     Route::get('/riwayat-pesanan', fn() => redirect()->route('orders.index'));
 
     Route::get('/profile', [HomeController::class, 'profile'])->name('profile');

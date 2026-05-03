@@ -5,11 +5,18 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Midtrans\Config as MidtransConfig;
+use Midtrans\Transaction;
+use Midtrans\Snap;
+use Throwable;
+use App\Services\OrderAllocationService;
 
 class HomeController extends Controller
 {
@@ -251,7 +258,148 @@ class HomeController extends Controller
 
         $request->session()->forget('cart');
 
-        return redirect()->route('orders.show', $order)->with('status', 'Pesanan berhasil dibuat.');
+        return redirect()->route('orders.show', ['order' => $order, 'pay' => 1])->with('status', 'Pesanan berhasil dibuat. Lanjutkan pembayaran.');
+    }
+
+    public function snapToken(Order $order): JsonResponse
+    {
+        /** @var User $currentUser */
+        $currentUser = Auth::user();
+
+        abort_unless($currentUser->isAdmin() || $order->user_id === Auth::id(), 403);
+
+        if ($order->payment_status === Order::PAYMENT_DIBAYAR) {
+            return response()->json([
+                'message' => 'Pesanan ini sudah dibayar.',
+            ], 422);
+        }
+
+        if (in_array($order->payment_status, [Order::PAYMENT_GAGAL, Order::PAYMENT_KADALUARSA, Order::PAYMENT_DIBATALKAN], true)) {
+            return response()->json([
+                'message' => 'Status pembayaran pesanan ini sudah final dan tidak bisa dibayar ulang.',
+            ], 422);
+        }
+
+        if (!config('services.midtrans.server_key') || !config('services.midtrans.client_key')) {
+            return response()->json([
+                'message' => 'Konfigurasi Midtrans belum lengkap. Isi MIDTRANS_SERVER_KEY dan MIDTRANS_CLIENT_KEY.',
+            ], 422);
+        }
+
+        try {
+            $this->configureMidtrans();
+
+            $token = Snap::getSnapToken($this->buildSnapPayload($order));
+
+            $notes = $this->decodeOrderNotes($order);
+            $notes['midtrans'] = array_merge($notes['midtrans'] ?? [], [
+                'snap_token' => $token,
+                'snap_created_at' => now()->toIso8601String(),
+            ]);
+
+            $order->update([
+                'notes' => json_encode($notes, JSON_UNESCAPED_UNICODE),
+            ]);
+
+            return response()->json([
+                'token' => $token,
+            ]);
+        } catch (Throwable $exception) {
+            Log::error('Gagal membuat Midtrans Snap token.', [
+                'order_id' => $order->id,
+                'order_code' => $order->order_code,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Gagal terhubung ke Midtrans. Coba beberapa saat lagi.',
+            ], 500);
+        }
+    }
+
+    public function midtransNotification(Request $request): JsonResponse
+    {
+        if (!config('services.midtrans.server_key')) {
+            return response()->json([
+                'message' => 'MIDTRANS_SERVER_KEY belum dikonfigurasi.',
+            ], 503);
+        }
+
+        $payload = $request->json()->all();
+        if (empty($payload)) {
+            $payload = $request->all();
+        }
+
+        $orderCode = (string) ($payload['order_id'] ?? '');
+        $statusCode = (string) ($payload['status_code'] ?? '');
+        $grossAmount = (string) ($payload['gross_amount'] ?? '');
+        $incomingSignature = (string) ($payload['signature_key'] ?? '');
+
+        if ($orderCode === '' || $statusCode === '' || $grossAmount === '' || $incomingSignature === '') {
+            return response()->json([
+                'message' => 'Payload Midtrans tidak lengkap.',
+            ], 422);
+        }
+
+        $expectedSignature = hash('sha512', $orderCode . $statusCode . $grossAmount . config('services.midtrans.server_key'));
+
+        if (!hash_equals($expectedSignature, $incomingSignature)) {
+            return response()->json([
+                'message' => 'Signature Midtrans tidak valid.',
+            ], 403);
+        }
+
+        $order = Order::query()->where('order_code', $orderCode)->first();
+
+        if (!$order) {
+            return response()->json([
+                'message' => 'Order tidak ditemukan.',
+            ], 404);
+        }
+
+        $this->applyMidtransPayloadToOrder($order, $payload, now()->toIso8601String());
+
+        return response()->json(['message' => 'OK']);
+    }
+
+    public function syncMidtransStatus(Order $order): JsonResponse
+    {
+        /** @var User $currentUser */
+        $currentUser = Auth::user();
+
+        abort_unless($currentUser->isAdmin() || $order->user_id === Auth::id(), 403);
+
+        if (!config('services.midtrans.server_key') || !config('services.midtrans.client_key')) {
+            return response()->json([
+                'message' => 'Konfigurasi Midtrans belum lengkap.',
+            ], 422);
+        }
+
+        try {
+            $this->configureMidtrans();
+
+            $response = Transaction::status($order->order_code);
+            // ensure associative array (nested objects -> arrays)
+            $payload = json_decode(json_encode($response), true);
+            $this->applyMidtransPayloadToOrder($order, $payload);
+
+            return response()->json([
+                'message' => 'OK',
+                'transaction_status' => $payload['transaction_status'] ?? null,
+                'payment_status' => $order->fresh()->payment_status,
+                'order_status' => $order->fresh()->order_status,
+            ]);
+        } catch (Throwable $exception) {
+            Log::warning('Gagal sinkronisasi status Midtrans.', [
+                'order_id' => $order->id,
+                'order_code' => $order->order_code,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Gagal mengambil status terbaru dari Midtrans.',
+            ], 500);
+        }
     }
 
     public function ordersIndex(Request $request)
@@ -459,5 +607,165 @@ class HomeController extends Controller
     private function generateOrderCode(): string
     {
         return 'ORD-' . now()->format('YmdHis') . '-' . strtoupper(Str::random(4));
+    }
+
+    private function decodeOrderNotes(Order $order): array
+    {
+        if (!$order->notes) {
+            return [];
+        }
+
+        $decoded = json_decode($order->notes, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function resolveMidtransPaymentMethodLabel(array $payload): ?string
+    {
+        $paymentType = (string) ($payload['payment_type'] ?? '');
+        $bank = strtolower((string) ($payload['va_numbers'][0]['bank'] ?? $payload['bank'] ?? ''));
+
+        return match ($paymentType) {
+            'bank_transfer' => match ($bank) {
+                    'bca' => 'BCA VA',
+                    'bni' => 'BNI VA',
+                    'bri' => 'BRI VA',
+                    'permata' => 'Permata VA',
+                    default => 'Transfer Bank',
+                },
+            'qris' => 'QRIS',
+            'gopay' => 'GoPay',
+            'ovo' => 'OVO',
+            'credit_card' => 'Kartu Kredit',
+            'cstore' => 'Convenience Store',
+            default => null,
+        };
+    }
+
+    private function applyMidtransPayloadToOrder(Order $order, array $payload, ?string $notifiedAt = null): void
+    {
+        $transactionStatus = (string) ($payload['transaction_status'] ?? '');
+        $fraudStatus = (string) ($payload['fraud_status'] ?? '');
+
+        $paymentStatus = Order::PAYMENT_PENDING;
+        $orderStatus = Order::STATUS_MENUNGGU_PEMBAYARAN;
+        $paidAt = null;
+
+        if ($transactionStatus === 'settlement' || ($transactionStatus === 'capture' && $fraudStatus === 'accept')) {
+            $paymentStatus = Order::PAYMENT_DIBAYAR;
+            $orderStatus = Order::STATUS_DIBAYAR;
+            $paidAt = now();
+        } elseif ($transactionStatus === 'expire') {
+            $paymentStatus = Order::PAYMENT_KADALUARSA;
+            $orderStatus = Order::STATUS_DIBATALKAN;
+        } elseif ($transactionStatus === 'cancel') {
+            $paymentStatus = Order::PAYMENT_DIBATALKAN;
+            $orderStatus = Order::STATUS_DIBATALKAN;
+        } elseif (in_array($transactionStatus, ['deny', 'failure'], true)) {
+            $paymentStatus = Order::PAYMENT_GAGAL;
+            $orderStatus = Order::STATUS_DIBATALKAN;
+        } elseif ($transactionStatus === 'pending' || ($transactionStatus === 'capture' && $fraudStatus === 'challenge')) {
+            $paymentStatus = Order::PAYMENT_PENDING;
+            $orderStatus = Order::STATUS_MENUNGGU_PEMBAYARAN;
+        }
+
+        $notes = $this->decodeOrderNotes($order);
+        $paymentMethodLabel = $this->resolveMidtransPaymentMethodLabel($payload);
+        $notes['midtrans'] = array_merge($notes['midtrans'] ?? [], [
+            'transaction_id' => (string) ($payload['transaction_id'] ?? ''),
+            'transaction_status' => $transactionStatus,
+            'payment_type' => (string) ($payload['payment_type'] ?? ''),
+            'bank' => (string) ($payload['va_numbers'][0]['bank'] ?? $payload['bank'] ?? ''),
+            'payment_method_label' => $paymentMethodLabel,
+            'fraud_status' => $fraudStatus,
+            'status_code' => (string) ($payload['status_code'] ?? ''),
+            'status_message' => (string) ($payload['status_message'] ?? ''),
+            'notified_at' => $notifiedAt ?? now()->toIso8601String(),
+        ]);
+
+        $order->update([
+            'payment_status' => $paymentStatus,
+            'order_status' => $orderStatus,
+            'paid_at' => $paidAt ?? $order->paid_at,
+            'notes' => json_encode($notes, JSON_UNESCAPED_UNICODE),
+        ]);
+
+        // If order just moved to paid, run allocation & decrement rolls (idempotent)
+        if ($paymentStatus === Order::PAYMENT_DIBAYAR) {
+            try {
+                $allocationService = new OrderAllocationService();
+                $allocationService->allocateForOrder($order->fresh());
+            } catch (Throwable $e) {
+                Log::error('Gagal melakukan alokasi stok roll untuk pesanan.', [
+                    'order_id' => $order->id,
+                    'order_code' => $order->order_code,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    private function configureMidtrans(): void
+    {
+        MidtransConfig::$serverKey = (string) config('services.midtrans.server_key');
+        MidtransConfig::$isProduction = (bool) config('services.midtrans.is_production', false);
+        MidtransConfig::$isSanitized = true;
+        MidtransConfig::$is3ds = true;
+    }
+
+    private function buildSnapPayload(Order $order): array
+    {
+        $order->loadMissing('items');
+
+        $itemDetails = [];
+        foreach ($order->items as $item) {
+            $itemDetails[] = [
+                'id' => 'ITEM-' . $item->id,
+                'price' => (int) round((float) $item->line_total),
+                'quantity' => 1,
+                'name' => Str::limit($item->product_name . ' ' . $item->length . 'x' . $item->width . 'm x' . $item->quantity, 50, ''),
+            ];
+        }
+
+        if ((float) $order->shipping_cost > 0) {
+            $itemDetails[] = [
+                'id' => 'SHIP-' . $order->id,
+                'price' => (int) round((float) $order->shipping_cost),
+                'quantity' => 1,
+                'name' => 'Biaya Pengiriman',
+            ];
+        }
+
+        return [
+            'transaction_details' => [
+                'order_id' => $order->order_code,
+                'gross_amount' => (int) round((float) $order->total_amount),
+            ],
+            'customer_details' => [
+                'first_name' => $order->customer_name,
+                'email' => $order->customer_email,
+                'phone' => $order->customer_phone,
+                'shipping_address' => [
+                    'first_name' => $order->customer_name,
+                    'phone' => $order->customer_phone,
+                    'address' => $order->shipping_address,
+                    'city' => $order->shipping_city,
+                    'postal_code' => $order->postal_code,
+                    'country_code' => 'IDN',
+                ],
+            ],
+            'item_details' => $itemDetails,
+            'enabled_payments' => [
+                'bca_va',
+                'bni_va',
+                'bri_va',
+                'permata_va',
+                'gopay',
+                'qris',
+                'credit_card',
+                'cstore',
+                'bank_transfer',
+            ],
+        ];
     }
 }

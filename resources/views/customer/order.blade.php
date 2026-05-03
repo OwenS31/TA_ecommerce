@@ -3,6 +3,14 @@
 @section('title', 'Detail Pesanan - CV. Tri Jaya')
 
 @section('content')
+    @php
+        $canPayNow = in_array(
+            $order->payment_status,
+            [\App\Models\Order::PAYMENT_MENUNGGU, \App\Models\Order::PAYMENT_PENDING],
+            true,
+        );
+    @endphp
+
     <section class="py-16 bg-slate-50">
         <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="mb-8">
@@ -22,13 +30,17 @@
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                             <div class="rounded-2xl bg-slate-50 p-4">
                                 <p class="text-slate-500">Status pembayaran</p>
-                                <p class="mt-1 font-bold text-slate-900">{{ str_replace('_', ' ', $order->payment_status) }}
+                                <p class="mt-1 font-bold text-slate-900">{{ $order->paymentStatusLabel() }}
                                 </p>
                             </div>
                             <div class="rounded-2xl bg-slate-50 p-4">
                                 <p class="text-slate-500">Status pesanan</p>
                                 <p class="mt-1 font-bold text-slate-900">{{ str_replace('_', ' ', $order->order_status) }}
                                 </p>
+                            </div>
+                            <div class="rounded-2xl bg-slate-50 p-4">
+                                <p class="text-slate-500">Metode pembayaran</p>
+                                <p class="mt-1 font-bold text-slate-900">{{ $order->paymentMethodLabel() ?? '-' }}</p>
                             </div>
                             <div class="rounded-2xl bg-slate-50 p-4">
                                 <p class="text-slate-500">Estimasi pengiriman</p>
@@ -79,6 +91,20 @@
                                 <span>Rp {{ number_format((float) $order->total_amount, 0, ',', '.') }}</span>
                             </div>
                         </div>
+
+                        @if ($canPayNow)
+                            <button type="button" id="payNowButton"
+                                class="mt-6 inline-flex w-full justify-center px-6 py-3 rounded-full bg-cyan-500 text-white font-semibold hover:bg-cyan-400 transition">
+                                Bayar Sekarang (Midtrans)
+                            </button>
+                            <p id="midtransError" class="mt-3 text-xs text-red-600 hidden"></p>
+                        @elseif ($order->payment_status === \App\Models\Order::PAYMENT_DIBAYAR)
+                            <p class="mt-6 text-sm text-emerald-700 font-semibold">Pembayaran sudah diterima.</p>
+                        @else
+                            <p class="mt-6 text-sm text-amber-700 font-semibold">Status pembayaran sudah final
+                                ({{ str_replace('_', ' ', $order->payment_status) }}).
+                                Silakan buat pesanan baru jika ingin melanjutkan pembelian.</p>
+                        @endif
                     </div>
 
                     <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -100,4 +126,124 @@
             </div>
         </div>
     </section>
+@endsection
+
+@section('scripts')
+    @if ($canPayNow)
+        <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js"
+            data-client-key="{{ config('services.midtrans.client_key') }}"></script>
+        <script>
+            (function() {
+                const payNowButton = document.getElementById('payNowButton');
+                const errorLabel = document.getElementById('midtransError');
+                const syncStatusUrl = '{{ route('orders.sync-midtrans-status', $order) }}';
+                const redirectToHistory = '{{ route('orders.index') }}';
+
+                if (!payNowButton) {
+                    return;
+                }
+
+                const setError = (message) => {
+                    errorLabel.textContent = message;
+                    errorLabel.classList.remove('hidden');
+                };
+
+                const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+                const syncPaymentStatus = async () => {
+                    let lastError = null;
+
+                    for (let attempt = 0; attempt < 3; attempt += 1) {
+                        try {
+                            const response = await fetch(syncStatusUrl, {
+                                method: 'GET',
+                                headers: {
+                                    'Accept': 'application/json',
+                                },
+                            });
+
+                            const result = await response.json();
+                            if (!response.ok) {
+                                throw new Error(result.message || 'Gagal sinkronisasi status pembayaran.');
+                            }
+
+                            if (result.payment_status && result.payment_status !==
+                                '{{ \App\Models\Order::PAYMENT_PENDING }}' && result.payment_status !==
+                                '{{ \App\Models\Order::PAYMENT_MENUNGGU }}') {
+                                return true;
+                            }
+
+                            if (result.transaction_status === 'settlement' || result.transaction_status ===
+                                'capture') {
+                                return true;
+                            }
+
+                            await sleep(1500);
+                        } catch (error) {
+                            lastError = error;
+                            break;
+                        }
+                    }
+
+                    if (lastError) {
+                        console.warn(lastError);
+                    }
+
+                    return false;
+                };
+
+                const openSnapPopup = async () => {
+                    payNowButton.disabled = true;
+                    payNowButton.classList.add('opacity-60', 'cursor-not-allowed');
+                    errorLabel.classList.add('hidden');
+
+                    try {
+                        const response = await fetch('{{ route('orders.snap-token', $order) }}', {
+                            method: 'GET',
+                            headers: {
+                                'Accept': 'application/json',
+                            },
+                        });
+
+                        const result = await response.json();
+                        if (!response.ok || !result.token) {
+                            throw new Error(result.message || 'Token Midtrans tidak tersedia.');
+                        }
+
+                        if (!window.snap) {
+                            throw new Error('Snap JS belum termuat. Periksa MIDTRANS_CLIENT_KEY.');
+                        }
+
+                        window.snap.pay(result.token, {
+                            onSuccess: async function() {
+                                await syncPaymentStatus();
+                                window.location.href = redirectToHistory;
+                            },
+                            onPending: async function() {
+                                await syncPaymentStatus();
+                                window.location.href = redirectToHistory;
+                            },
+                            onError: function() {
+                                setError('Pembayaran gagal diproses. Coba kembali.');
+                            },
+                            onClose: function() {
+                                setError('Popup pembayaran ditutup sebelum selesai.');
+                            },
+                        });
+                    } catch (error) {
+                        setError(error.message || 'Terjadi kendala saat membuka Midtrans Snap.');
+                    } finally {
+                        payNowButton.disabled = false;
+                        payNowButton.classList.remove('opacity-60', 'cursor-not-allowed');
+                    }
+                };
+
+                payNowButton.addEventListener('click', openSnapPopup);
+
+                if (@json(request()->boolean('pay'))) {
+                    openSnapPopup();
+                }
+            })();
+        </script>
+    @endif
 @endsection

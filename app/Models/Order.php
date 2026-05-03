@@ -17,6 +17,10 @@ class Order extends Model
 
     public const PAYMENT_MENUNGGU = 'menunggu_pembayaran';
     public const PAYMENT_DIBAYAR = 'dibayar';
+    public const PAYMENT_PENDING = 'pending';
+    public const PAYMENT_GAGAL = 'gagal';
+    public const PAYMENT_KADALUARSA = 'kadaluarsa';
+    public const PAYMENT_DIBATALKAN = 'dibatalkan';
 
     protected $fillable = [
         'order_code',
@@ -61,6 +65,64 @@ class Order extends Model
             self::STATUS_SELESAI,
             self::STATUS_DIBATALKAN,
         ];
+    }
+
+    public static function paymentStatusOptions(): array
+    {
+        return [
+            self::PAYMENT_MENUNGGU,
+            self::PAYMENT_PENDING,
+            self::PAYMENT_DIBAYAR,
+            self::PAYMENT_GAGAL,
+            self::PAYMENT_KADALUARSA,
+            self::PAYMENT_DIBATALKAN,
+        ];
+    }
+
+    public function decodedNotes(): array
+    {
+        if (!$this->notes) {
+            return [];
+        }
+
+        $decoded = json_decode($this->notes, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    public function paymentStatusLabel(): string
+    {
+        return ucwords(str_replace('_', ' ', (string) $this->payment_status));
+    }
+
+    public function paymentMethodLabel(): ?string
+    {
+        $notes = $this->decodedNotes();
+        $midtrans = $notes['midtrans'] ?? [];
+
+        $label = $midtrans['payment_method_label'] ?? null;
+        if (is_string($label) && $label !== '') {
+            return $label;
+        }
+
+        $paymentType = (string) ($midtrans['payment_type'] ?? '');
+        $bank = strtolower((string) ($midtrans['bank'] ?? $midtrans['va_bank'] ?? ''));
+
+        return match ($paymentType) {
+            'bank_transfer' => match ($bank) {
+                    'bca' => 'BCA VA',
+                    'bni' => 'BNI VA',
+                    'bri' => 'BRI VA',
+                    'permata' => 'Permata VA',
+                    default => 'Transfer Bank',
+                },
+            'qris' => 'QRIS',
+            'gopay' => 'GoPay',
+            'ovo' => 'OVO',
+            'credit_card' => 'Kartu Kredit',
+            'cstore' => 'Convenience Store',
+            default => null,
+        };
     }
 
     public function user(): BelongsTo

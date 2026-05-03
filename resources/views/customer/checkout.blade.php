@@ -122,49 +122,17 @@
                         </div>
                     </div>
 
-                    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                        <h3 class="text-lg font-bold text-slate-950 mb-4">Metode Pembayaran</h3>
-                        <div class="grid grid-cols-1 gap-3 text-sm">
-                            @foreach ($paymentMethods as $method)
-                                <div class="rounded-2xl border border-slate-200 px-4 py-3 bg-slate-50">
-                                    {{ $method['name'] }}
-                                </div>
-                            @endforeach
-                        </div>
-                    </div>
+                    <button type="submit" form="checkoutForm"
+                        class="inline-flex w-full justify-center px-6 py-3 rounded-full bg-cyan-500 text-white font-semibold hover:bg-cyan-400 transition">Buat
+                        Pesanan & Lanjut Bayar</button>
 
-                    <button type="button" id="openPaymentModal"
-                        class="inline-flex w-full justify-center px-6 py-3 rounded-full bg-cyan-500 text-white font-semibold hover:bg-cyan-400 transition">Bayar
-                        Sekarang</button>
-
-                    <p class="text-xs text-slate-500 leading-6">Tombol ini menampilkan popup pembayaran. Untuk Midtrans Snap
-                        asli, token dan konfigurasi gateway perlu dihubungkan di server.</p>
+                    <p class="text-xs text-slate-500 leading-6">Setelah pesanan dibuat, pembayaran dibuka lewat Midtrans
+                        Snap
+                        (sandbox) di halaman detail pesanan.</p>
                 </aside>
             </form>
         </div>
     </section>
-
-    <div id="paymentModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 px-4">
-        <div class="w-full max-w-lg rounded-4xl bg-white p-6 shadow-2xl">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <p class="text-sm font-semibold text-cyan-700 uppercase tracking-[0.2em] mb-2">Popup Pembayaran</p>
-                    <h2 class="text-2xl font-black text-slate-950">Midtrans Snap</h2>
-                </div>
-                <button type="button" id="closePaymentModal"
-                    class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
-            </div>
-            <p class="mt-4 text-sm leading-7 text-slate-600">Di implementasi penuh, modal ini diganti Snap popup resmi dari
-                Midtrans. Saat ini Anda bisa memilih jasa pengiriman lalu melanjutkan checkout untuk membuat pesanan
-                konfirmasi.</p>
-            <div class="mt-6 rounded-3xl bg-slate-50 p-4 text-sm text-slate-600">
-                Metode yang didukung: Virtual Account, Transfer Bank, QRIS, GoPay, OVO, dan Kartu Kredit.
-            </div>
-            <button type="submit" form="checkoutForm"
-                class="mt-6 inline-flex w-full justify-center px-6 py-3 rounded-full bg-slate-900 text-white font-semibold hover:bg-slate-800 transition">Lanjutkan
-                & Buat Pesanan</button>
-        </div>
-    </div>
 @endsection
 
 @section('scripts')
@@ -177,7 +145,6 @@
             const shippingCostLabel = document.getElementById('shippingCostLabel');
             const totalLabel = document.getElementById('totalLabel');
             const subtotal = @json((float) $subtotal);
-            const paymentModal = document.getElementById('paymentModal');
 
             const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {
                 style: 'currency',
@@ -238,23 +205,6 @@
                 shippingCostLabel.textContent = formatCurrency(shippingCost);
                 totalLabel.textContent = formatCurrency(subtotal + shippingCost);
             };
-
-            document.getElementById('openPaymentModal').addEventListener('click', () => {
-                paymentModal.classList.remove('hidden');
-                paymentModal.classList.add('flex');
-            });
-
-            document.getElementById('closePaymentModal').addEventListener('click', () => {
-                paymentModal.classList.add('hidden');
-                paymentModal.classList.remove('flex');
-            });
-
-            paymentModal.addEventListener('click', (event) => {
-                if (event.target === paymentModal) {
-                    paymentModal.classList.add('hidden');
-                    paymentModal.classList.remove('flex');
-                }
-            });
 
             provinceSelect.addEventListener('change', populateCities);
             citySelect.addEventListener('change', populateServices);
