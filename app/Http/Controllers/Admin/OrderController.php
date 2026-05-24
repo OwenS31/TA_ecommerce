@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Services\OrderAllocationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Throwable;
 
 class OrderController extends Controller
 {
@@ -67,6 +70,8 @@ class OrderController extends Controller
 
         $order->update($payload);
 
+        $this->allocateStockIfPaid($order->fresh());
+
         return back()->with('status', 'Status pesanan berhasil diperbarui.');
     }
 
@@ -85,7 +90,26 @@ class OrderController extends Controller
             'paid_at' => now(),
         ]);
 
+        $this->allocateStockIfPaid($order->fresh());
+
         return back()->with('status', 'Pembayaran berhasil dikonfirmasi secara manual.');
+    }
+
+    private function allocateStockIfPaid(Order $order): void
+    {
+        if ($order->payment_status !== Order::PAYMENT_DIBAYAR) {
+            return;
+        }
+
+        try {
+            (new OrderAllocationService())->allocateForOrder($order);
+        } catch (Throwable $e) {
+            Log::error('Gagal melakukan alokasi stok roll untuk pesanan admin.', [
+                'order_id' => $order->id,
+                'order_code' => $order->order_code,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function getNextStatus(string $currentStatus): ?string

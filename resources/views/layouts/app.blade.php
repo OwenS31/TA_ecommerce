@@ -91,7 +91,8 @@
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
                     <div>
-                        <h3 class="text-lg font-bold text-white mb-3">CV. Tri Jaya</h3>
+                        <h3 class="text-lg font-bold text-white mb-3">{{ $storeSetting->store_name ?? 'CV. Tri Jaya' }}
+                        </h3>
                         <p class="text-sm text-slate-400 leading-6">Penjualan terpal berkualitas untuk kebutuhan
                             industri dan rumah tangga, dengan layanan custom ukuran dan pengiriman ke seluruh Indonesia.
                         </p>
@@ -108,14 +109,14 @@
                     <div>
                         <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400 mb-3">Kontak</h3>
                         <div class="space-y-2 text-sm text-slate-300">
-                            <p>Alamat: Lebak Timur 11 Kav 1-2</p>
-                            <p>WhatsApp: 085100600657</p>
+                            <p>Alamat: {{ $storeSetting->store_address ?? 'Belum diisi' }}</p>
+                            <p>WhatsApp: {{ $storeSetting->store_whatsapp ?? 'Belum diisi' }}</p>
                             <p>Email: anghienarta@gmail.com</p>
                         </div>
                     </div>
                 </div>
                 <div class="mt-10 pt-6 border-t border-slate-800 text-center text-sm text-slate-500">
-                    Copyright © CV. Tri Jaya 1997–sekarang
+                    Copyright © {{ $storeSetting->store_name ?? 'CV. Tri Jaya' }} 1997–sekarang
                 </div>
             </div>
         </footer>

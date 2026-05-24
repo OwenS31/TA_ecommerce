@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\ProductRoll;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -15,13 +16,20 @@ class CuttingOptimizationController extends Controller
     public function index(): View
     {
         $orders = Order::query()
-            ->with('items')
+            ->with(['items.product', 'items.product.rolls'])
             ->where('order_status', Order::STATUS_DIBAYAR)
             ->latest('order_date')
             ->get();
 
         $demands = $this->buildDemands($orders);
-        $rolls = $this->runGreedyAndDp($demands);
+        $productRolls = ProductRoll::all()->map(fn($r) => [
+            'id' => $r->id,
+            'length' => (float) $r->length,
+            'width' => (float) $r->width,
+            'area' => (float) $r->area,
+        ])->all();
+
+        $rolls = $this->runGreedyAndDp($demands, $productRolls);
         $recommendations = $this->buildRecommendations($rolls);
 
         [$totalUsed, $totalCapacity] = $this->calculateUsage($rolls);
@@ -43,13 +51,19 @@ class CuttingOptimizationController extends Controller
     public function exportCsv(): StreamedResponse
     {
         $orders = Order::query()
-            ->with('items')
+            ->with(['items.product', 'items.product.rolls'])
             ->where('order_status', Order::STATUS_DIBAYAR)
             ->latest('order_date')
             ->get();
 
         $demands = $this->buildDemands($orders);
-        $rolls = $this->runGreedyAndDp($demands);
+        $productRolls = ProductRoll::all()->map(fn($r) => [
+            'id' => $r->id,
+            'length' => (float) $r->length,
+            'width' => (float) $r->width,
+            'area' => (float) $r->area,
+        ])->all();
+        $rolls = $this->runGreedyAndDp($demands, $productRolls);
         $recommendations = $this->buildRecommendations($rolls);
 
         return response()->streamDownload(function () use ($recommendations) {
@@ -89,13 +103,42 @@ class CuttingOptimizationController extends Controller
         foreach ($orders as $order) {
             foreach ($order->items as $item) {
                 $totalArea = (float) $item->length * (float) $item->width * $item->quantity;
-                $requiredLength = $totalArea / self::ROLL_WIDTH;
 
-                // Split into chunks so each segment can fit into a single roll.
+                // Pick the smallest roll that can still satisfy this item, so stock is not biased to the largest roll.
+                $productRoll = null;
+                $candidateRolls = $item->product?->rolls?->sortBy([
+                    ['area', 'asc'],
+                    ['length', 'asc'],
+                    ['width', 'asc'],
+                    ['id', 'asc'],
+                ]) ?? collect();
+
+                foreach ($candidateRolls as $candidateRoll) {
+                    $candidateWidth = (float) $candidateRoll->width;
+                    $candidateLength = (float) $candidateRoll->length;
+                    $requiredLengthOnCandidate = $candidateWidth > 0 ? ($totalArea / $candidateWidth) : 0;
+
+                    if ($requiredLengthOnCandidate <= $candidateLength) {
+                        $productRoll = $candidateRoll;
+                        break;
+                    }
+                }
+
+                if ($productRoll === null && $candidateRolls->isNotEmpty()) {
+                    $productRoll = $candidateRolls->first();
+                }
+
+                $rollWidth = $productRoll ? (float) $productRoll->width : self::ROLL_WIDTH;
+                $rollLength = $productRoll ? (float) $productRoll->length : self::ROLL_LENGTH;
+
+                // Convert total area to required length on that roll width.
+                $requiredLength = $totalArea / $rollWidth;
+
+                // Split into chunks so each segment can fit into a single roll of that product.
                 $chunkIndex = 1;
                 while ($requiredLength > 0) {
-                    $segmentLength = min(self::ROLL_LENGTH, $requiredLength);
-                    $segmentArea = $segmentLength * self::ROLL_WIDTH;
+                    $segmentLength = min($rollLength, $requiredLength);
+                    $segmentArea = $segmentLength * $rollWidth;
 
                     $demands[] = [
                         'order_id' => $order->id,
@@ -105,6 +148,12 @@ class CuttingOptimizationController extends Controller
                         'used_length' => $segmentLength,
                         'used_area' => $segmentArea,
                         'label' => $order->order_code . '-S' . $chunkIndex,
+                        'product_roll_id' => $productRoll?->id,
+                        'product_roll_width' => $rollWidth,
+                        'product_roll_length' => $rollLength,
+                        'item_length' => (float) $item->length,
+                        'item_width' => (float) $item->width,
+                        'item_quantity' => (int) $item->quantity,
                     ];
 
                     $requiredLength -= $segmentLength;
@@ -116,11 +165,12 @@ class CuttingOptimizationController extends Controller
         return $demands;
     }
 
-    private function runGreedyAndDp(array $demands): array
+    private function runGreedyAndDp(array $demands, array $availableProductRolls = []): array
     {
-        $greedySelection = $this->runGreedySelection($demands);
+        $greedySelection = $this->runGreedySelection($demands, $availableProductRolls);
         $priorityDemands = $greedySelection['priority_demands'];
-        $selectedRollCount = $greedySelection['roll_count'];
+        $virtualRolls = $greedySelection['virtual_rolls'] ?? [];
+        $selectedRollCount = count($virtualRolls);
         $remainingDemands = $priorityDemands;
         $rolls = [];
 
@@ -130,7 +180,17 @@ class CuttingOptimizationController extends Controller
                 break;
             }
 
-            $packResult = $this->knapsackSelectAssignments($remainingDemands, (int) round(self::ROLL_LENGTH * 100));
+            $rollCapacity = $virtualRolls[$rollNumber - 1]['capacity_length'] ?? self::ROLL_LENGTH;
+            $rollWidth = $virtualRolls[$rollNumber - 1]['width'] ?? self::ROLL_WIDTH;
+            $rollProductId = $virtualRolls[$rollNumber - 1]['product_roll_id'] ?? null;
+
+            // Filter demands to only those with matching product_roll_id
+            $demandsForThisRoll = array_values(array_filter(
+                $remainingDemands,
+                fn($d) => ($d['product_roll_id'] ?? null) === $rollProductId
+            ));
+
+            $packResult = $this->knapsackSelectAssignments($demandsForThisRoll, (int) round($rollCapacity * 100), $rollWidth);
             $selectedIndexes = $packResult['selected_indexes'];
 
             if (count($selectedIndexes) === 0) {
@@ -141,7 +201,7 @@ class CuttingOptimizationController extends Controller
             $currentAssignments = [];
             $nextRemaining = [];
 
-            foreach ($remainingDemands as $index => $demand) {
+            foreach ($demandsForThisRoll as $index => $demand) {
                 if (isset($selectedMap[$index])) {
                     $demand['assigned_roll_number'] = $rollNumber;
                     $currentAssignments[] = $demand;
@@ -151,21 +211,28 @@ class CuttingOptimizationController extends Controller
                 $nextRemaining[] = $demand;
             }
 
+            $remainingDemands = array_values(array_merge(
+                array_values(array_filter($remainingDemands, fn($d) => ($d['product_roll_id'] ?? null) !== $rollProductId)),
+                $nextRemaining
+            ));
+
             usort($currentAssignments, fn($a, $b) => $a['priority_rank'] <=> $b['priority_rank']);
-            $usedLength = array_sum(array_column($currentAssignments, 'used_length'));
+            $usedLength = 0;
+            foreach ($currentAssignments as $ca) {
+                $usedLength += ((float) $ca['used_area']) / $rollWidth;
+            }
 
             $rolls[] = [
-                'capacity_length' => self::ROLL_LENGTH,
+                'capacity_length' => $rollCapacity,
+                'width' => $rollWidth,
                 'used_length' => $usedLength,
-                'remaining_length' => max(0, self::ROLL_LENGTH - $usedLength),
+                'remaining_length' => max(0, $rollCapacity - $usedLength),
                 'assignments' => $currentAssignments,
                 'dp_best_fill_length' => $packResult['best_fill_length'],
-                'dp_waste_length' => max(0, self::ROLL_LENGTH - $packResult['best_fill_length']),
-                'used_area' => $usedLength * self::ROLL_WIDTH,
-                'waste_area' => max(0, self::ROLL_LENGTH - $usedLength) * self::ROLL_WIDTH,
+                'dp_waste_length' => max(0, $rollCapacity - $packResult['best_fill_length']),
+                'used_area' => array_sum(array_column($currentAssignments, 'used_area')),
+                'waste_area' => max(0, $rollCapacity - $usedLength) * $rollWidth,
             ];
-
-            $remainingDemands = array_values($nextRemaining);
         }
 
         // Safety net untuk edge case jika masih ada demand tersisa.
@@ -174,16 +241,29 @@ class CuttingOptimizationController extends Controller
             $assigned = false;
 
             foreach ($rolls as $rollIndex => $roll) {
-                if ($roll['remaining_length'] < $demand['used_length']) {
+                // Ensure demand matches the product of this roll (check first assignment's product_roll_id)
+                if (!empty($roll['assignments'])) {
+                    $firstAssignmentProdRollId = $roll['assignments'][0]['product_roll_id'] ?? null;
+                    $demandProdRollId = $demand['product_roll_id'] ?? null;
+                    // Only allow assignment if product_roll_id matches (or both are null)
+                    if ($firstAssignmentProdRollId !== $demandProdRollId) {
+                        continue;
+                    }
+                }
+
+                // compute how much length this demand would use on this roll's width
+                $rollWidth = $roll['width'] ?? self::ROLL_WIDTH;
+                $demandLenForThisRoll = ((float) $demand['used_area']) / $rollWidth;
+                if ($roll['remaining_length'] < $demandLenForThisRoll) {
                     continue;
                 }
 
                 $demand['assigned_roll_number'] = $rollIndex + 1;
                 $rolls[$rollIndex]['assignments'][] = $demand;
-                $rolls[$rollIndex]['used_length'] += $demand['used_length'];
-                $rolls[$rollIndex]['remaining_length'] = max(0, self::ROLL_LENGTH - $rolls[$rollIndex]['used_length']);
-                $rolls[$rollIndex]['used_area'] = $rolls[$rollIndex]['used_length'] * self::ROLL_WIDTH;
-                $rolls[$rollIndex]['waste_area'] = $rolls[$rollIndex]['remaining_length'] * self::ROLL_WIDTH;
+                $rolls[$rollIndex]['used_length'] += $demandLenForThisRoll;
+                $rolls[$rollIndex]['remaining_length'] = max(0, $rolls[$rollIndex]['capacity_length'] - $rolls[$rollIndex]['used_length']);
+                $rolls[$rollIndex]['used_area'] = array_sum(array_column($rolls[$rollIndex]['assignments'], 'used_area'));
+                $rolls[$rollIndex]['waste_area'] = $rolls[$rollIndex]['remaining_length'] * ($rolls[$rollIndex]['width'] ?? self::ROLL_WIDTH);
                 $rolls[$rollIndex]['dp_best_fill_length'] = $rolls[$rollIndex]['used_length'];
                 $rolls[$rollIndex]['dp_waste_length'] = $rolls[$rollIndex]['remaining_length'];
                 $assigned = true;
@@ -195,24 +275,27 @@ class CuttingOptimizationController extends Controller
             }
 
             $demand['assigned_roll_number'] = count($rolls) + 1;
-            $usedLength = (float) $demand['used_length'];
+            $newRollCapacity = $demand['product_roll_length'] ?? self::ROLL_LENGTH;
+            $newRollWidth = $demand['product_roll_width'] ?? self::ROLL_WIDTH;
+            $usedLength = (float) ($demand['used_area'] / $newRollWidth);
 
             $rolls[] = [
-                'capacity_length' => self::ROLL_LENGTH,
+                'capacity_length' => $newRollCapacity,
+                'width' => $newRollWidth,
                 'used_length' => $usedLength,
-                'remaining_length' => max(0, self::ROLL_LENGTH - $usedLength),
+                'remaining_length' => max(0, $newRollCapacity - $usedLength),
                 'assignments' => [$demand],
                 'dp_best_fill_length' => $usedLength,
-                'dp_waste_length' => max(0, self::ROLL_LENGTH - $usedLength),
-                'used_area' => $usedLength * self::ROLL_WIDTH,
-                'waste_area' => max(0, self::ROLL_LENGTH - $usedLength) * self::ROLL_WIDTH,
+                'dp_waste_length' => max(0, $newRollCapacity - $usedLength),
+                'used_area' => $demand['used_area'],
+                'waste_area' => max(0, $newRollCapacity - $usedLength) * $newRollWidth,
             ];
         }
 
         return $rolls;
     }
 
-    private function runGreedySelection(array $demands): array
+    private function runGreedySelection(array $demands, array $availableProductRolls = []): array
     {
         $virtualRolls = [];
         $unassignedDemands = array_values($demands);
@@ -226,11 +309,18 @@ class CuttingOptimizationController extends Controller
             $bestPlacement = $this->findBestPlacement($unassignedDemands, $virtualRolls);
             $demand = $unassignedDemands[$bestPlacement['demand_index']];
 
+
             if ($bestPlacement['roll_index'] === null) {
+                $capacity = $demand['product_roll_length'] ?? self::ROLL_LENGTH;
+                $width = $demand['product_roll_width'] ?? self::ROLL_WIDTH;
+                $prodRollId = $demand['product_roll_id'] ?? null;
+
                 $virtualRolls[] = [
-                    'capacity_length' => self::ROLL_LENGTH,
+                    'capacity_length' => $capacity,
+                    'width' => $width,
+                    'product_roll_id' => $prodRollId,
                     'used_length' => 0,
-                    'remaining_length' => self::ROLL_LENGTH,
+                    'remaining_length' => $capacity,
                     'assignments' => [],
                 ];
                 $bestPlacement['roll_index'] = count($virtualRolls) - 1;
@@ -241,7 +331,8 @@ class CuttingOptimizationController extends Controller
             $demand['greedy_roll_number'] = $bestPlacement['roll_index'] + 1;
 
             $virtualRolls[$bestPlacement['roll_index']]['assignments'][] = $demand;
-            $virtualRolls[$bestPlacement['roll_index']]['used_length'] += $demand['used_length'];
+            $usedLen = $demand['used_area'] / ($virtualRolls[$bestPlacement['roll_index']]['width'] ?? self::ROLL_WIDTH);
+            $virtualRolls[$bestPlacement['roll_index']]['used_length'] += $usedLen;
             $virtualRolls[$bestPlacement['roll_index']]['remaining_length'] =
                 $virtualRolls[$bestPlacement['roll_index']]['capacity_length'] - $virtualRolls[$bestPlacement['roll_index']]['used_length'];
 
@@ -253,6 +344,7 @@ class CuttingOptimizationController extends Controller
         return [
             'priority_demands' => $priorityDemands,
             'roll_count' => count($virtualRolls),
+            'virtual_rolls' => $virtualRolls,
         ];
     }
 
@@ -261,16 +353,25 @@ class CuttingOptimizationController extends Controller
         $rows = [];
 
         foreach ($rolls as $rollIndex => $roll) {
+            $rollWidth = $roll['width'] ?? self::ROLL_WIDTH;
+            $remaining = $roll['capacity_length'] ?? self::ROLL_LENGTH;
             foreach ($roll['assignments'] as $assignment) {
+                $usedLengthOnRoll = $rollWidth > 0 ? ((float) $assignment['used_area']) / $rollWidth : (float) $assignment['used_length'];
+                $remaining_before = $remaining;
+                $remaining -= $usedLengthOnRoll;
+                $remaining_after = max(0, $remaining);
+
                 $rows[] = [
                     'priority_rank' => (int) ($assignment['priority_rank'] ?? 999999),
                     'roll_number' => $rollIndex + 1,
                     'order_code' => $assignment['order_code'],
                     'customer_name' => $assignment['customer_name'],
                     'product_name' => $assignment['product_name'],
-                    'used_length' => (float) $assignment['used_length'],
+                    'used_length' => (float) $usedLengthOnRoll,
                     'used_area' => (float) $assignment['used_area'],
-                    'roll_remaining_length' => (float) $roll['remaining_length'],
+                    // roll_remaining_length now is the remaining AFTER this assignment so each row on same roll differs
+                    'roll_remaining_length' => (float) $remaining_after,
+                    'roll_remaining_before' => (float) $remaining_before,
                     'priority_score' => (float) ($assignment['priority_score'] ?? 0),
                 ];
             }
@@ -281,14 +382,16 @@ class CuttingOptimizationController extends Controller
         return $rows;
     }
 
-    private function knapsackSelectAssignments(array $demands, int $capacity): array
+    private function knapsackSelectAssignments(array $demands, int $capacity, float $rollWidth = self::ROLL_WIDTH): array
     {
         $states = [
             0 => [],
         ];
 
         foreach ($demands as $index => $demand) {
-            $weight = (int) round(((float) $demand['used_length']) * 100);
+            // weight is the length that this demand would consume on a roll with width $rollWidth
+            $demandLengthForRoll = ((float) $demand['used_area']) / $rollWidth;
+            $weight = (int) round($demandLengthForRoll * 100);
             $snapshot = $states;
 
             foreach ($snapshot as $sum => $selectedIndexes) {
@@ -320,12 +423,17 @@ class CuttingOptimizationController extends Controller
         $best = null;
 
         foreach ($demands as $demandIndex => $demand) {
+            // compute demand length in meters as stored (may be tied to its product roll)
             $demandLength = (float) $demand['used_length'];
 
-            // Opsi buat roll baru selalu ada selama demand bisa masuk kapasitas roll.
-            if ($demandLength <= self::ROLL_LENGTH) {
-                $newRollUtilization = $demandLength / self::ROLL_LENGTH;
-                $newRollRemainder = self::ROLL_LENGTH - $demandLength;
+            // Option to create a new virtual roll: prefer product's roll length if available
+            $candidateCapacity = $demand['product_roll_length'] ?? self::ROLL_LENGTH;
+            $candidateWidth = $demand['product_roll_width'] ?? self::ROLL_WIDTH;
+            $demandLenOnCandidate = ((float) $demand['used_area']) / $candidateWidth;
+
+            if ($demandLenOnCandidate <= $candidateCapacity) {
+                $newRollUtilization = $demandLenOnCandidate / $candidateCapacity;
+                $newRollRemainder = $candidateCapacity - $demandLenOnCandidate;
 
                 if (
                     $best === null
@@ -334,7 +442,7 @@ class CuttingOptimizationController extends Controller
                     || (
                         $newRollUtilization === $best['utilization']
                         && $newRollRemainder === $best['remainder']
-                        && $demandLength > $best['demand_length']
+                        && $demandLenOnCandidate > $best['demand_length']
                     )
                 ) {
                     $best = [
@@ -342,19 +450,23 @@ class CuttingOptimizationController extends Controller
                         'roll_index' => null,
                         'utilization' => $newRollUtilization,
                         'remainder' => $newRollRemainder,
-                        'demand_length' => $demandLength,
+                        'demand_length' => $demandLenOnCandidate,
                     ];
                 }
             }
 
             foreach ($rolls as $rollIndex => $roll) {
-                if ($roll['remaining_length'] < $demandLength) {
+                // compute demand length in the context of this roll's width
+                $rollWidth = $roll['width'] ?? self::ROLL_WIDTH;
+                $dLenForThisRoll = ((float) $demand['used_area']) / $rollWidth;
+
+                if ($roll['remaining_length'] < $dLenForThisRoll) {
                     continue;
                 }
 
-                $newUsedLength = $roll['used_length'] + $demandLength;
-                $utilization = $newUsedLength / self::ROLL_LENGTH;
-                $remainder = self::ROLL_LENGTH - $newUsedLength;
+                $newUsedLength = $roll['used_length'] + $dLenForThisRoll;
+                $utilization = $newUsedLength / ($roll['capacity_length'] ?? self::ROLL_LENGTH);
+                $remainder = ($roll['capacity_length'] ?? self::ROLL_LENGTH) - $newUsedLength;
 
                 if (
                     $best === null
@@ -363,7 +475,7 @@ class CuttingOptimizationController extends Controller
                     || (
                         $utilization === $best['utilization']
                         && $remainder === $best['remainder']
-                        && $demandLength > $best['demand_length']
+                        && $dLenForThisRoll > $best['demand_length']
                     )
                 ) {
                     $best = [
@@ -371,7 +483,7 @@ class CuttingOptimizationController extends Controller
                         'roll_index' => $rollIndex,
                         'utilization' => $utilization,
                         'remainder' => $remainder,
-                        'demand_length' => $demandLength,
+                        'demand_length' => $dLenForThisRoll,
                     ];
                 }
             }
@@ -383,7 +495,7 @@ class CuttingOptimizationController extends Controller
     private function calculateUsage(array $rolls): array
     {
         $totalUsed = array_sum(array_column($rolls, 'used_length'));
-        $totalCapacity = count($rolls) * self::ROLL_LENGTH;
+        $totalCapacity = array_sum(array_column($rolls, 'capacity_length')) ?: (count($rolls) * self::ROLL_LENGTH);
 
         return [$totalUsed, $totalCapacity];
     }

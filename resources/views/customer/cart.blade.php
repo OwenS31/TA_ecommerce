@@ -22,6 +22,12 @@
                 </div>
             @endif
 
+            @if ($errors->has('stock'))
+                <div class="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700 text-sm">
+                    {{ $errors->first('stock') }}
+                </div>
+            @endif
+
             @if ($cartItems)
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div class="lg:col-span-2 space-y-4">
@@ -134,6 +140,11 @@
 @endsection
 
 @section('scripts')
+    @if ($errors->has('stock'))
+        <script>
+            alert(@json($errors->first('stock')));
+        </script>
+    @endif
     <script>
         (function() {
             const formatCurrency = (value) => new Intl.NumberFormat('id-ID', {

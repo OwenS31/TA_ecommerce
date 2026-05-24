@@ -18,16 +18,16 @@ class DatabaseSeeder extends Seeder
         // Create Admin Account
         User::factory()->create([
             'name'     => 'Admin CV. Tri Jaya',
-            'email'    => 'admin@trijaya.com',
-            'phone'    => '081234567890',
+            'email'    => 'tj3113trijaya@gmail.com',
+            'phone'    => '085100279866',
             'password' => bcrypt('password'),
             'role'     => 'admin',
         ]);
 
         // Create sample user for testing
         User::factory()->create([
-            'name'     => 'User Test',
-            'email'    => 'user@trijaya.com',
+            'name'     => 'User1',
+            'email'    => 'user1@trijaya.com',
             'phone'    => '081298765432',
             'password' => bcrypt('password'),
             'role'     => 'user',

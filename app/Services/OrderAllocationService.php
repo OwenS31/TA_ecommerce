@@ -40,11 +40,13 @@ class OrderAllocationService
                 foreach ($roll['assignments'] as $assignment) {
                     $neededArea = (float) $assignment['used_area'];
                     $productId = $assignment['product_id'];
+                    $pieceWidth = (float) ($assignment['piece_width'] ?? self::ROLL_WIDTH);
 
                     $availableRolls = ProductRoll::query()
                         ->where('product_id', $productId)
+                        ->where('width', $pieceWidth)
                         ->where('area', '>', 0)
-                        ->orderBy('area', 'asc')
+                        ->orderBy('length', 'asc')
                         ->get();
 
                     $usedFromRolls = [];
@@ -54,14 +56,24 @@ class OrderAllocationService
                             break;
                         }
 
+                        /** @var ProductRoll $pr */
                         $take = min($pr->area, $neededArea);
                         if ($take <= 0) {
                             continue;
                         }
 
                         $before = (float) $pr->area;
-                        $pr->area = max(0, $pr->area - $take);
-                        $pr->save();
+                        $currentArea = (float) $pr->area;
+                        $currentWidth = (float) $pr->width;
+                        $afterArea = max(0, $currentArea - $take);
+                        $afterLength = $currentWidth > 0 ? round($afterArea / $currentWidth, 2) : 0;
+
+                        ProductRoll::query()
+                            ->whereKey($pr->id)
+                            ->update([
+                                'area' => $afterArea,
+                                'length' => $afterLength,
+                            ]);
 
                         $neededArea -= $take;
 
@@ -69,7 +81,7 @@ class OrderAllocationService
                             'product_roll_id' => $pr->id,
                             'taken_area' => $take,
                             'before_area' => $before,
-                            'after_area' => (float) $pr->area,
+                            'after_area' => $afterArea,
                         ];
                     }
 
@@ -103,26 +115,32 @@ class OrderAllocationService
         $demands = [];
 
         foreach ($order->items as $item) {
-            $totalArea = (float) $item->length * (float) $item->width * (int) $item->quantity;
-            $requiredLength = $totalArea / self::ROLL_WIDTH;
+            $pieceLength = (float) $item->length;
+            $pieceWidth = (float) $item->width;
+            $pieceArea = $pieceLength * $pieceWidth;
 
-            $chunkIndex = 1;
-            while ($requiredLength > 0) {
-                $segmentLength = min(self::ROLL_LENGTH, $requiredLength);
-                $segmentArea = $segmentLength * self::ROLL_WIDTH;
+            for ($pieceIndex = 1; $pieceIndex <= (int) $item->quantity; $pieceIndex++) {
+                $remainingLength = $pieceLength;
+                $segmentIndex = 1;
 
-                $demands[] = [
-                    'order_id' => $order->id,
-                    'order_code' => $order->order_code,
-                    'product_id' => $item->product_id,
-                    'product_name' => $item->product_name,
-                    'used_length' => $segmentLength,
-                    'used_area' => $segmentArea,
-                    'label' => $order->order_code . '-S' . $chunkIndex,
-                ];
+                while ($remainingLength > 0) {
+                    $segmentLength = min(self::ROLL_LENGTH, $remainingLength);
 
-                $requiredLength -= $segmentLength;
-                $chunkIndex++;
+                    $demands[] = [
+                        'order_id' => $order->id,
+                        'order_code' => $order->order_code,
+                        'product_id' => $item->product_id,
+                        'product_name' => $item->product_name,
+                        'piece_width' => $pieceWidth,
+                        'piece_length' => $pieceLength,
+                        'used_length' => $segmentLength,
+                        'used_area' => $segmentLength * $pieceWidth,
+                        'label' => $order->order_code . '-P' . $pieceIndex . '-S' . $segmentIndex,
+                    ];
+
+                    $remainingLength -= $segmentLength;
+                    $segmentIndex++;
+                }
             }
         }
 

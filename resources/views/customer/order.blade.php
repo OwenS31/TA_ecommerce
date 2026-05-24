@@ -24,6 +24,12 @@
                 </div>
             @endif
 
+            @if ($errors->any())
+                <div class="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800 text-sm">
+                    {{ $errors->first() }}
+                </div>
+            @endif
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div class="lg:col-span-2 space-y-6">
                     <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -98,6 +104,18 @@
                                 Bayar Sekarang (Midtrans)
                             </button>
                             <p id="midtransError" class="mt-3 text-xs text-red-600 hidden"></p>
+                            @if ($canCancel)
+                                <form method="POST" action="{{ route('orders.cancel', $order) }}"
+                                    class="mt-3"
+                                    onsubmit="return confirm('Batalkan pesanan ini? Status akan berubah menjadi dibatalkan.')">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit"
+                                        class="inline-flex w-full justify-center px-6 py-3 rounded-full border border-rose-200 bg-rose-50 text-rose-700 font-semibold hover:bg-rose-100 transition">
+                                        Cancel Pesanan
+                                    </button>
+                                </form>
+                            @endif
                         @elseif ($order->payment_status === \App\Models\Order::PAYMENT_DIBAYAR)
                             <p class="mt-6 text-sm text-emerald-700 font-semibold">Pembayaran sudah diterima.</p>
                         @else

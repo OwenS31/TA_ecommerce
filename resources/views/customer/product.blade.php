@@ -5,6 +5,7 @@
 @section('content')
     @php
         $basePrice = (float) $product->price_per_m2;
+        $availableStock = (float) $product->total_stock;
         $imageUrl = $product->image
             ? \Illuminate\Support\Facades\Storage::url($product->image)
             : 'https://images.unsplash.com/photo-1523413454516-899b543d3fdd?auto=format&fit=crop&w=1200&q=80';
@@ -50,11 +51,21 @@
                                 <p class="text-slate-500">Deskripsi lengkap</p>
                                 <p class="mt-1 font-medium leading-7 text-slate-700">{{ $productDescription }}</p>
                             </div>
+                            <div class="rounded-2xl bg-slate-50 p-4 sm:col-span-2">
+                                <p class="text-slate-500">Stok tersedia</p>
+                                <p class="mt-1 font-semibold text-slate-900">
+                                    {{ number_format($availableStock, 2, ',', '.') }} m²</p>
+                            </div>
                         </div>
                     </div>
 
                     <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                         <h2 class="text-lg font-bold text-slate-950 mb-4">Kalkulator Harga</h2>
+                        @if ($errors->has('stock'))
+                            <div class="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700 text-sm">
+                                {{ $errors->first('stock') }}
+                            </div>
+                        @endif
                         <form method="POST" action="{{ route('cart.add', $product) }}" class="space-y-4"
                             id="productOrderForm">
                             @csrf
@@ -63,21 +74,21 @@
                                     <label for="length" class="block text-sm font-semibold text-slate-700 mb-2">Panjang
                                         (meter)</label>
                                     <input id="length" name="length" type="number" min="0" step="0.1"
-                                        value="1"
+                                        value="{{ old('length', 1) }}"
                                         class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-100">
                                 </div>
                                 <div>
                                     <label for="width" class="block text-sm font-semibold text-slate-700 mb-2">Lebar
                                         (meter)</label>
                                     <input id="width" name="width" type="number" min="0" step="0.1"
-                                        value="1"
+                                        value="{{ old('width', 1) }}"
                                         class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-100">
                                 </div>
                                 <div>
                                     <label for="quantity" class="block text-sm font-semibold text-slate-700 mb-2">Jumlah
                                         Lembar</label>
                                     <input id="quantity" name="quantity" type="number" min="1" step="1"
-                                        value="1"
+                                        value="{{ old('quantity', 1) }}"
                                         class="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm focus:border-cyan-500 focus:outline-none focus:ring-4 focus:ring-cyan-100">
                                 </div>
                             </div>
@@ -105,6 +116,11 @@
 @endsection
 
 @section('scripts')
+    @if ($errors->has('stock'))
+        <script>
+            alert(@json($errors->first('stock')));
+        </script>
+    @endif
     <script>
         (function() {
             const basePrice = @json($basePrice);

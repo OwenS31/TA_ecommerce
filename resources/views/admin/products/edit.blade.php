@@ -94,13 +94,16 @@
 
                 <div id="rollsContainer" class="space-y-3">
                     @foreach ($product->rolls as $i => $roll)
+                        @php
+                            $displayLength = $roll->width > 0 ? $roll->area / $roll->width : $roll->length;
+                        @endphp
                         <div class="roll-row flex items-center gap-3">
                             <input type="hidden" name="rolls[{{ $i }}][id]" value="{{ $roll->id }}">
                             <div class="flex-1">
                                 <label class="block text-xs text-gray-500 mb-1">Panjang (m)</label>
                                 <input type="number" name="rolls[{{ $i }}][length]"
-                                    value="{{ old("rolls.$i.length", $roll->length) }}" required min="0.01"
-                                    step="0.01"
+                                    value="{{ old("rolls.$i.length", number_format($displayLength, 2, '.', '')) }}"
+                                    required min="0.01" step="0.01"
                                     class="roll-length w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
                             </div>
                             <div class="flex items-end pb-0.5">

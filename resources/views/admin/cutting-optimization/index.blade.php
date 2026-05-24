@@ -43,30 +43,33 @@
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prioritas</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pesanan</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pelanggan</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produk</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Terpakai (m)</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Terpakai (m²)</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sisa Roll (m)</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                     @forelse ($recommendations as $row)
                         <tr>
                             <td class="px-4 py-3 font-medium text-gray-900">#{{ $row['priority_rank'] }}</td>
-                            <td class="px-4 py-3">Roll #{{ $row['roll_number'] }}</td>
                             <td class="px-4 py-3 font-medium text-gray-900">{{ $row['order_code'] }}</td>
                             <td class="px-4 py-3">{{ $row['customer_name'] }}</td>
                             <td class="px-4 py-3">{{ $row['product_name'] }}</td>
                             <td class="px-4 py-3">{{ number_format($row['used_length'], 2, ',', '.') }}</td>
                             <td class="px-4 py-3">{{ number_format($row['used_area'], 2, ',', '.') }}</td>
-                            <td class="px-4 py-3">{{ number_format($row['roll_remaining_length'], 2, ',', '.') }}</td>
+                            @php $rollForRow = $rolls[$row['roll_number'] - 1] ?? null; @endphp
+                            <td class="px-4 py-3">
+                                <button type="button" class="detailBtn px-3 py-1 bg-gray-800 text-white rounded text-sm"
+                                    data-roll='{{ json_encode($rollForRow ?? [], JSON_HEX_APOS | JSON_HEX_QUOT) }}'
+                                    data-row='{{ json_encode($row, JSON_HEX_APOS | JSON_HEX_QUOT) }}'>Detail</button>
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-4 py-10 text-center text-gray-400">Belum ada pesanan dibayar yang
+                            <td colspan="7" class="px-4 py-10 text-center text-gray-400">Belum ada pesanan dibayar yang
                                 siap dipotong.</td>
                         </tr>
                     @endforelse
@@ -74,81 +77,97 @@
             </table>
         </div>
     </div>
-
-    <div class="space-y-6">
-        <h2 class="text-lg font-semibold text-gray-900">Visualisasi Pola Pemotongan (Canvas)</h2>
-
-        @forelse ($rolls as $rollIndex => $roll)
-            <div class="bg-white rounded-xl border border-gray-200 p-4">
-                <div class="flex flex-wrap items-center justify-between gap-3 mb-3 text-sm">
-                    <p class="font-semibold text-gray-900">Roll #{{ $rollIndex + 1 }} (2m × 100m)</p>
-                    <p class="text-gray-600">
-                        Terpakai: {{ number_format($roll['used_length'], 2, ',', '.') }}m |
-                        Sisa: {{ number_format($roll['remaining_length'], 2, ',', '.') }}m |
-                        DP Best Fill: {{ number_format($roll['dp_best_fill_length'], 2, ',', '.') }}m
-                    </p>
+    <!-- Modal: Detail Optimasi -->
+    <div id="optimizationModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+        <div class="bg-white rounded-lg w-11/12 md:w-2/3 lg:w-1/2 p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-semibold">Detail Optimasi</h3>
+                <button id="modalClose" class="text-gray-600">Tutup</button>
+            </div>
+            <div class="space-y-3 text-sm text-gray-700">
+                <div>
+                    <h4 class="font-semibold">Rincian Potongan</h4>
+                    <div id="modalDetails" class="text-xs"></div>
                 </div>
-                <canvas class="rollCanvas w-full border border-gray-200 rounded" height="90"
-                    data-roll-length="{{ $rollLength }}" data-segments='@json($roll['assignments'])'></canvas>
             </div>
-        @empty
-            <div class="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">
-                Tidak ada visualisasi karena belum ada data pesanan dibayar.
-            </div>
-        @endforelse
+        </div>
     </div>
 @endsection
 
 @section('scripts')
     <script>
-        const palette = [
-            '#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2', '#ea580c', '#be123c', '#4f46e5', '#0f766e'
-        ];
+        // Modal handlers
+        const modal = document.getElementById('optimizationModal');
+        const modalClose = document.getElementById('modalClose');
+        const modalDetails = document.getElementById('modalDetails');
 
-        document.querySelectorAll('.rollCanvas').forEach((canvas) => {
-            const ctx = canvas.getContext('2d');
-            const rollLength = Number(canvas.dataset.rollLength || 100);
-            const segments = JSON.parse(canvas.dataset.segments || '[]');
+        function showModal() {
+            modal.classList.remove('hidden');
+        }
 
-            const width = canvas.clientWidth || 800;
-            const height = canvas.height;
-            canvas.width = width;
+        function hideModal() {
+            modal.classList.add('hidden');
+        }
 
-            const margin = 20;
-            const barY = 40;
-            const barHeight = 24;
-            const barWidth = width - margin * 2;
+        modalClose.addEventListener('click', hideModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) hideModal();
+        });
 
-            ctx.clearRect(0, 0, width, height);
-
-            ctx.fillStyle = '#f3f4f6';
-            ctx.fillRect(margin, barY, barWidth, barHeight);
-
-            let x = margin;
-            segments.forEach((seg, idx) => {
-                const segmentW = Math.max(1, (Number(seg.used_length) / rollLength) * barWidth);
-                const color = palette[idx % palette.length];
-
-                ctx.fillStyle = color;
-                ctx.fillRect(x, barY, segmentW, barHeight);
-
-                ctx.fillStyle = '#111827';
-                ctx.font = '11px sans-serif';
-                const label = seg.order_code;
-                if (segmentW > 42) {
-                    ctx.fillText(label, x + 4, barY + 16);
-                } else {
-                    // Tetap beri label untuk semua segmen kecil di area atas bar.
-                    ctx.fillText(label, x + 1, barY - 8);
+        document.querySelectorAll('.detailBtn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                let roll = {};
+                try {
+                    roll = JSON.parse(btn.getAttribute('data-roll') || '{}');
+                } catch (err) {
+                    roll = {};
                 }
 
-                x += segmentW;
-            });
+                const segments = roll.assignments || [];
 
-            ctx.fillStyle = '#374151';
-            ctx.font = '11px sans-serif';
-            ctx.fillText('0m', margin, barY + barHeight + 16);
-            ctx.fillText(rollLength + 'm', margin + barWidth - 24, barY + barHeight + 16);
+                // Details: pecah berdasarkan lebar standar terpal (2m), grouped per order
+                const STANDARD_ROLL_WIDTH = 2;
+                const byOrder = {};
+                segments.forEach((s) => {
+                    const orderId = s.order_id || 'unknown';
+                    const orderCode = s.order_code || 'N/A';
+                    const itemLen = Number(s.item_length) || 0;
+                    const itemW = Number(s.item_width) || 0;
+                    const itemQty = Number(s.item_quantity) || 1;
+
+                    if (!byOrder[orderId]) {
+                        byOrder[orderId] = {
+                            order_code: orderCode,
+                            bySize: {}
+                        };
+                    }
+
+                    let remainingWidth = itemW;
+                    while (remainingWidth > 0) {
+                        const pieceWidth = Math.min(STANDARD_ROLL_WIDTH, remainingWidth);
+                        const key = `${pieceWidth}×${itemLen}`;
+                        byOrder[orderId].bySize[key] = (byOrder[orderId].bySize[key] || 0) +
+                            itemQty;
+                        remainingWidth -= pieceWidth;
+                    }
+                });
+
+                let detailsHtml = '<div class="mb-2"><strong>Rincian Potongan</strong>';
+                for (const orderId of Object.keys(byOrder)) {
+                    const orderData = byOrder[orderId];
+                    detailsHtml +=
+                        `<div class="mt-3 border-t pt-2"><strong class="text-sm">Pesanan: ${orderData.order_code}</strong><ul class="list-disc pl-5 text-sm">`;
+                    for (const k of Object.keys(orderData.bySize)) {
+                        detailsHtml += `<li>${k} m sebanyak ${orderData.bySize[k]} lembar</li>`;
+                    }
+                    detailsHtml += '</ul></div>';
+                }
+                detailsHtml += '</div>';
+
+                modalDetails.innerHTML = detailsHtml;
+
+                showModal();
+            });
         });
     </script>
 @endsection

@@ -10,6 +10,18 @@
                 <h1 class="text-3xl font-black text-slate-950">Riwayat pesanan Anda</h1>
             </div>
 
+            @if (session('status'))
+                <div class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800 text-sm">
+                    {{ session('status') }}
+                </div>
+            @endif
+
+            @if ($errors->any())
+                <div class="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800 text-sm">
+                    {{ $errors->first() }}
+                </div>
+            @endif
+
             <form method="GET" action="{{ route('orders.index') }}"
                 class="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="flex flex-col md:flex-row md:items-end gap-4">
@@ -59,8 +71,22 @@
                                     <td class="px-4 py-3">{{ $order->paymentStatusLabel() }}</td>
                                     <td class="px-4 py-3">{{ str_replace('_', ' ', $order->order_status) }}</td>
                                     <td class="px-4 py-3">
-                                        <a href="{{ route('orders.show', $order) }}"
-                                            class="font-semibold text-blue-600 hover:text-blue-800">Detail</a>
+                                        <div class="flex flex-wrap items-center gap-3">
+                                            <a href="{{ route('orders.show', $order) }}"
+                                                class="font-semibold text-blue-600 hover:text-blue-800">Detail</a>
+
+                                            @if (
+                                                $order->order_status === \App\Models\Order::STATUS_MENUNGGU_PEMBAYARAN &&
+                                                    in_array($order->payment_status, [\App\Models\Order::PAYMENT_MENUNGGU, \App\Models\Order::PAYMENT_PENDING], true))
+                                                <form method="POST" action="{{ route('orders.cancel', $order) }}"
+                                                    onsubmit="return confirm('Batalkan pesanan ini? Status akan berubah menjadi dibatalkan.')">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit"
+                                                        class="font-semibold text-rose-600 hover:text-rose-800">Cancel</button>
+                                                </form>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
