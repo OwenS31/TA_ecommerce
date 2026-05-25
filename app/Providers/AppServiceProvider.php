@@ -21,7 +21,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (app()->runningUnitTests()) {
+        if (app()->runningInConsole() || app()->runningUnitTests()) {
             View::share('storeSetting', new StoreSetting([
                 'store_name' => 'CV. Tri Jaya',
             ]));
