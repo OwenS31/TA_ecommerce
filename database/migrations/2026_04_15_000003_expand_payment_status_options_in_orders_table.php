@@ -9,6 +9,10 @@ return new class extends Migration {
      */
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE orders MODIFY payment_status ENUM('menunggu_pembayaran','pending','dibayar','gagal','kadaluarsa','dibatalkan') NOT NULL DEFAULT 'menunggu_pembayaran'");
     }
 
@@ -17,6 +21,10 @@ return new class extends Migration {
      */
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("UPDATE orders SET payment_status = 'menunggu_pembayaran' WHERE payment_status IN ('pending','gagal','kadaluarsa','dibatalkan')");
         DB::statement("ALTER TABLE orders MODIFY payment_status ENUM('menunggu_pembayaran','dibayar') NOT NULL DEFAULT 'menunggu_pembayaran'");
     }

@@ -6,7 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'CV. Tri Jaya - Penjualan Terpal')</title>
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @unless (app()->runningUnitTests())
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @endunless
 </head>
 
 <body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
