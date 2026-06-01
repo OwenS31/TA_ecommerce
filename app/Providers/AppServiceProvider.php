@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\StoreSetting;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,8 +26,11 @@ class AppServiceProvider extends ServiceProvider
             View::share('storeSetting', new StoreSetting([
                 'store_name' => 'CV. Tri Jaya',
             ]));
-
             return;
+        }
+
+        if (app()->environment('production')) {
+            URL::forceScheme('https');
         }
 
         View::share('storeSetting', StoreSetting::query()->firstOrCreate([], [
