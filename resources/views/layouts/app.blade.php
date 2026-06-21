@@ -112,7 +112,7 @@
                         <h3 class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400 mb-3">Kontak</h3>
                         <div class="space-y-2 text-sm text-slate-300">
                             <p>Alamat: {{ $storeSetting->store_address ?? 'Belum diisi' }}</p>
-                            <p>WhatsApp: {{ $storeSetting->store_whatsapp ?? 'Belum diisi' }}</p>
+                            <p><a href="https://wa.me/6285100600657" target="_blank" class="hover:text-white">WhatsApp: 085100600657</a></p>
                             <p>Email: anghienarta@gmail.com</p>
                         </div>
                     </div>

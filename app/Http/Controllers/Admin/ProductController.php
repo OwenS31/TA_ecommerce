@@ -38,6 +38,7 @@ class ProductController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'price_per_m2' => ['required', 'numeric', 'min:0'],
+            'weight_per_m2' => ['nullable', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
             'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
             'is_active' => ['boolean'],
@@ -48,6 +49,7 @@ class ProductController extends Controller
             'name.required' => 'Nama produk wajib diisi.',
             'price_per_m2.required' => 'Harga per m² wajib diisi.',
             'price_per_m2.numeric' => 'Harga harus berupa angka.',
+            'weight_per_m2.numeric' => 'Berat harus berupa angka.',
             'rolls.required' => 'Minimal satu roll harus ditambahkan.',
             'rolls.min' => 'Minimal satu roll harus ditambahkan.',
             'rolls.*.length.required' => 'Panjang roll wajib diisi.',
@@ -63,6 +65,7 @@ class ProductController extends Controller
             $product = Product::create([
                 'name' => $validated['name'],
                 'price_per_m2' => $validated['price_per_m2'],
+                'weight_per_m2' => $validated['weight_per_m2'] ?? null,
                 'description' => $validated['description'] ?? null,
                 'image' => $imagePath,
                 'is_active' => $request->boolean('is_active', true),
@@ -92,6 +95,7 @@ class ProductController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'price_per_m2' => ['required', 'numeric', 'min:0'],
+            'weight_per_m2' => ['nullable', 'numeric', 'min:0'],
             'description' => ['nullable', 'string'],
             'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:2048'],
             'is_active' => ['boolean'],
@@ -103,6 +107,7 @@ class ProductController extends Controller
             'name.required' => 'Nama produk wajib diisi.',
             'price_per_m2.required' => 'Harga per m² wajib diisi.',
             'price_per_m2.numeric' => 'Harga harus berupa angka.',
+            'weight_per_m2.numeric' => 'Berat harus berupa angka.',
             'rolls.required' => 'Minimal satu roll harus ditambahkan.',
             'rolls.min' => 'Minimal satu roll harus ditambahkan.',
             'rolls.*.length.required' => 'Panjang roll wajib diisi.',
@@ -120,6 +125,7 @@ class ProductController extends Controller
             $product->update([
                 'name' => $validated['name'],
                 'price_per_m2' => $validated['price_per_m2'],
+                'weight_per_m2' => $validated['weight_per_m2'] ?? null,
                 'description' => $validated['description'] ?? null,
                 'image' => $product->image,
                 'is_active' => $request->boolean('is_active', true),

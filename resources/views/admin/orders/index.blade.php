@@ -46,8 +46,8 @@
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID Pesanan</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pelanggan</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jenis Terpal</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ukuran (P×L)</th>
+                        {{-- <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jenis Terpal</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ukuran (P×L)</th> --}}
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jumlah</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pembayaran</th>
@@ -65,7 +65,7 @@
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-3 font-medium text-gray-900">{{ $order->order_code }}</td>
                             <td class="px-4 py-3 text-gray-700">{{ $order->customer_name }}</td>
-                            <td class="px-4 py-3 text-gray-700">{{ $firstItem?->product_name ?? '-' }}</td>
+                            {{-- <td class="px-4 py-3 text-gray-700">{{ $firstItem?->product_name ?? '-' }}</td>
                             <td class="px-4 py-3 text-gray-700">
                                 @if ($firstItem)
                                     {{ number_format($firstItem->length, 2, ',', '.') }} ×
@@ -73,7 +73,7 @@
                                 @else
                                     -
                                 @endif
-                            </td>
+                            </td> --}}
                             <td class="px-4 py-3 text-gray-700">{{ $totalSheets }} lembar</td>
                             <td class="px-4 py-3 text-gray-900 font-medium">Rp
                                 {{ number_format($order->total_amount, 0, ',', '.') }}</td>

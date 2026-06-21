@@ -10,12 +10,6 @@
                 <h1 class="text-3xl font-black text-slate-950">Keranjang Belanja</h1>
             </div>
 
-            @if (session('status'))
-                <div class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800 text-sm">
-                    {{ session('status') }}
-                </div>
-            @endif
-
             @if ($errors->has('cart'))
                 <div class="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700 text-sm">
                     {{ $errors->first('cart') }}

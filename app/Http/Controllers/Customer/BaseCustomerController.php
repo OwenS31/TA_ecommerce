@@ -103,11 +103,33 @@ abstract class BaseCustomerController extends Controller
         $cartItems = array_values($cart);
         $subtotal = collect($cartItems)->sum('subtotal');
 
+        $productIds = collect($cartItems)->pluck('product_id')->unique()->filter()->all();
+        $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
+
+        $totalWeightGram = 0;
+        foreach ($cartItems as $item) {
+            $weightPerSheetGram = 0.0;
+            if (isset($item['weight_per_sheet_gram'])) {
+                $weightPerSheetGram = (float) $item['weight_per_sheet_gram'];
+            } elseif (isset($products[$item['product_id']])) {
+                $product = $products[$item['product_id']];
+                $weightPerM2 = (float) $product->weight_per_m2;
+                $length = (float) ($item['length'] ?? 0);
+                $width = (float) ($item['width'] ?? 0);
+                $weightPerSheetGram = $length * $width * $weightPerM2 * 1000;
+            }
+            $quantity = (int) ($item['quantity'] ?? 0);
+            $totalWeightGram += $weightPerSheetGram * $quantity;
+        }
+
+        $totalWeightGram = max((int) round($totalWeightGram), 1);
+
         return [
             'cartItems' => $cartItems,
             'subtotal' => $subtotal,
             'grandTotal' => $subtotal,
             'itemCount' => collect($cartItems)->sum('quantity'),
+            'totalWeightGram' => $totalWeightGram,
         ];
     }
 
@@ -130,6 +152,7 @@ abstract class BaseCustomerController extends Controller
     {
         $areaPerSheet = $length * $width;
         $subtotal = (float) $product->price_per_m2 * $areaPerSheet * $quantity;
+        $weightPerSheetGram = $areaPerSheet * (float) ($product->weight_per_m2 ?? 0) * 1000;
 
         return [
             'key' => $this->cartItemKey($product, $length, $width),
@@ -142,6 +165,7 @@ abstract class BaseCustomerController extends Controller
             'quantity' => $quantity,
             'area_per_sheet' => $areaPerSheet,
             'subtotal' => $subtotal,
+            'weight_per_sheet_gram' => $weightPerSheetGram,
         ];
     }
 

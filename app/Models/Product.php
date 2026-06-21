@@ -10,6 +10,7 @@ class Product extends Model
     protected $fillable = [
         'name',
         'price_per_m2',
+        'weight_per_m2',
         'description',
         'image',
         'is_active',
@@ -19,6 +20,7 @@ class Product extends Model
     {
         return [
             'price_per_m2' => 'decimal:2',
+            'weight_per_m2' => 'decimal:4',
             'is_active' => 'boolean',
         ];
     }

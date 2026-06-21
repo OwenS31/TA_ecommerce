@@ -49,6 +49,27 @@ class OrderAllocationService
                         ->orderBy('length', 'asc')
                         ->get();
 
+                    // If there is no exact width match, allow a wider roll that can still
+                    // host this strip. This supports width splitting such as 7 -> 2 + 2 + 2 + 1.
+                    if ($availableRolls->isEmpty()) {
+                        $availableRolls = ProductRoll::query()
+                            ->where('product_id', $productId)
+                            ->where('area', '>', 0)
+                            ->where('width', '>=', $pieceWidth)
+                            ->orderBy('width', 'asc')
+                            ->orderBy('length', 'asc')
+                            ->get();
+
+                        if ($availableRolls->isEmpty()) {
+                            $availableRolls = ProductRoll::query()
+                                ->where('product_id', $productId)
+                                ->where('area', '>', 0)
+                                ->orderByRaw('ABS(width - ?) ASC', [$pieceWidth])
+                                ->orderBy('length', 'asc')
+                                ->get();
+                        }
+                    }
+
                     $usedFromRolls = [];
 
                     foreach ($availableRolls as $pr) {
@@ -117,34 +138,51 @@ class OrderAllocationService
         foreach ($order->items as $item) {
             $pieceLength = (float) $item->length;
             $pieceWidth = (float) $item->width;
-            $pieceArea = $pieceLength * $pieceWidth;
+            $widthStrips = $this->splitWidthIntoStrips($pieceWidth);
 
             for ($pieceIndex = 1; $pieceIndex <= (int) $item->quantity; $pieceIndex++) {
-                $remainingLength = $pieceLength;
-                $segmentIndex = 1;
+                foreach ($widthStrips as $widthIndex => $stripWidth) {
+                    $remainingLength = $pieceLength;
+                    $segmentIndex = 1;
 
-                while ($remainingLength > 0) {
-                    $segmentLength = min(self::ROLL_LENGTH, $remainingLength);
+                    while ($remainingLength > 0) {
+                        $segmentLength = min(self::ROLL_LENGTH, $remainingLength);
 
-                    $demands[] = [
-                        'order_id' => $order->id,
-                        'order_code' => $order->order_code,
-                        'product_id' => $item->product_id,
-                        'product_name' => $item->product_name,
-                        'piece_width' => $pieceWidth,
-                        'piece_length' => $pieceLength,
-                        'used_length' => $segmentLength,
-                        'used_area' => $segmentLength * $pieceWidth,
-                        'label' => $order->order_code . '-P' . $pieceIndex . '-S' . $segmentIndex,
-                    ];
+                        $demands[] = [
+                            'order_id' => $order->id,
+                            'order_code' => $order->order_code,
+                            'product_id' => $item->product_id,
+                            'product_name' => $item->product_name,
+                            'piece_width' => $stripWidth,
+                            'original_piece_width' => $pieceWidth,
+                            'piece_length' => $pieceLength,
+                            'used_length' => $segmentLength,
+                            'used_area' => $segmentLength * $stripWidth,
+                            'label' => $order->order_code . '-P' . $pieceIndex . '-W' . ($widthIndex + 1) . '-S' . $segmentIndex,
+                        ];
 
-                    $remainingLength -= $segmentLength;
-                    $segmentIndex++;
+                        $remainingLength -= $segmentLength;
+                        $segmentIndex++;
+                    }
                 }
             }
         }
 
         return $demands;
+    }
+
+    private function splitWidthIntoStrips(float $pieceWidth): array
+    {
+        $strips = [];
+        $remainingWidth = $pieceWidth;
+
+        while ($remainingWidth > 0) {
+            $stripWidth = min(self::ROLL_WIDTH, $remainingWidth);
+            $strips[] = round($stripWidth, 2);
+            $remainingWidth -= $stripWidth;
+        }
+
+        return $strips ?: [$pieceWidth];
     }
 
     private function runGreedyAndDp(array $demands): array

@@ -19,6 +19,7 @@ class CuttingOptimizationController extends Controller
             ->with(['items.product', 'items.product.rolls'])
             ->where('order_status', Order::STATUS_DIBAYAR)
             ->latest('order_date')
+            ->limit(100)
             ->get();
 
         $demands = $this->buildDemands($orders);
@@ -39,8 +40,8 @@ class CuttingOptimizationController extends Controller
             'rolls' => $rolls,
             'recommendations' => $recommendations,
             'demandsCount' => count($demands),
-            'usedPercent' => $totalCapacity > 0 ? ($totalUsed / $totalCapacity) * 100 : 0,
-            'wastePercent' => $totalCapacity > 0 ? (($totalCapacity - $totalUsed) / $totalCapacity) * 100 : 0,
+            // 'usedPercent' => $totalCapacity > 0 ? ($totalUsed / $totalCapacity) * 100 : 0,
+            // 'wastePercent' => $totalCapacity > 0 ? (($totalCapacity - $totalUsed) / $totalCapacity) * 100 : 0,
             'totalUsed' => $totalUsed,
             'totalWaste' => max(0, $totalCapacity - $totalUsed),
             'rollLength' => self::ROLL_LENGTH,
@@ -54,6 +55,7 @@ class CuttingOptimizationController extends Controller
             ->with(['items.product', 'items.product.rolls'])
             ->where('order_status', Order::STATUS_DIBAYAR)
             ->latest('order_date')
+            ->limit(100)
             ->get();
 
         $demands = $this->buildDemands($orders);
@@ -81,7 +83,7 @@ class CuttingOptimizationController extends Controller
 
             foreach ($recommendations as $row) {
                 fputcsv($output, [
-                    $row['priority_rank'],
+                    $row['display_priority'] ?? $row['priority_rank'],
                     'Roll #' . $row['roll_number'],
                     $row['order_code'],
                     $row['customer_name'],
@@ -101,6 +103,10 @@ class CuttingOptimizationController extends Controller
         $demands = [];
 
         foreach ($orders as $order) {
+            $orderDateStr = $order->order_date instanceof \Carbon\Carbon
+                ? $order->order_date->toDateTimeString()
+                : (string) $order->order_date;
+
             foreach ($order->items as $item) {
                 $totalArea = (float) $item->length * (float) $item->width * $item->quantity;
 
@@ -116,9 +122,9 @@ class CuttingOptimizationController extends Controller
                 foreach ($candidateRolls as $candidateRoll) {
                     $candidateWidth = (float) $candidateRoll->width;
                     $candidateLength = (float) $candidateRoll->length;
-                    $requiredLengthOnCandidate = $candidateWidth > 0 ? ($totalArea / $candidateWidth) : 0;
+                    $requiredLengthOnCandidate = $candidateWidth > 0.00001 ? ($totalArea / $candidateWidth) : 0;
 
-                    if ($requiredLengthOnCandidate <= $candidateLength) {
+                    if ($requiredLengthOnCandidate <= $candidateLength + 0.00001) {
                         $productRoll = $candidateRoll;
                         break;
                     }
@@ -131,18 +137,26 @@ class CuttingOptimizationController extends Controller
                 $rollWidth = $productRoll ? (float) $productRoll->width : self::ROLL_WIDTH;
                 $rollLength = $productRoll ? (float) $productRoll->length : self::ROLL_LENGTH;
 
+                // Safety: ensure valid dimensions to prevent infinite loops / excessive chunks
+                if ($rollWidth <= 0.00001 || $rollLength <= 0.00001) {
+                    $rollWidth = self::ROLL_WIDTH;
+                    $rollLength = self::ROLL_LENGTH;
+                }
+
                 // Convert total area to required length on that roll width.
                 $requiredLength = $totalArea / $rollWidth;
 
                 // Split into chunks so each segment can fit into a single roll of that product.
                 $chunkIndex = 1;
-                while ($requiredLength > 0) {
+                $maxChunksPerItem = 500; // hard limit to prevent memory explosion
+                while ($requiredLength > 0.00001 && $chunkIndex <= $maxChunksPerItem) {
                     $segmentLength = min($rollLength, $requiredLength);
                     $segmentArea = $segmentLength * $rollWidth;
 
                     $demands[] = [
                         'order_id' => $order->id,
                         'order_code' => $order->order_code,
+                        'order_date' => $orderDateStr,
                         'customer_name' => $order->customer_name,
                         'product_name' => $item->product_name,
                         'used_length' => $segmentLength,
@@ -364,7 +378,9 @@ class CuttingOptimizationController extends Controller
                 $rows[] = [
                     'priority_rank' => (int) ($assignment['priority_rank'] ?? 999999),
                     'roll_number' => $rollIndex + 1,
+                    'order_id' => (int) ($assignment['order_id'] ?? 0),
                     'order_code' => $assignment['order_code'],
+                    'order_date' => $assignment['order_date'] ?? null,
                     'customer_name' => $assignment['customer_name'],
                     'product_name' => $assignment['product_name'],
                     'used_length' => (float) $usedLengthOnRoll,
@@ -377,44 +393,125 @@ class CuttingOptimizationController extends Controller
             }
         }
 
-        usort($rows, fn($a, $b) => $a['priority_rank'] <=> $b['priority_rank']);
+        usort($rows, function ($a, $b) {
+            // Convert to ISO string to avoid Carbon overhead in comparison
+            $dateA = $a['order_date'] instanceof \Carbon\Carbon ? $a['order_date']->toDateTimeString() : (string) ($a['order_date'] ?? '');
+            $dateB = $b['order_date'] instanceof \Carbon\Carbon ? $b['order_date']->toDateTimeString() : (string) ($b['order_date'] ?? '');
+            $dateCompare = strcmp($dateB, $dateA);
+
+            if ($dateCompare !== 0) {
+                return $dateCompare;
+            }
+
+            $orderCompare = ($a['order_id'] ?? 0) <=> ($b['order_id'] ?? 0);
+
+            if ($orderCompare !== 0) {
+                return $orderCompare;
+            }
+
+            return ($a['priority_rank'] ?? 999999) <=> ($b['priority_rank'] ?? 999999);
+        });
+
+        foreach ($rows as $index => &$row) {
+            $row['display_priority'] = $index + 1;
+        }
+        unset($row);
 
         return $rows;
     }
 
     private function knapsackSelectAssignments(array $demands, int $capacity, float $rollWidth = self::ROLL_WIDTH): array
     {
-        $states = [
-            0 => [],
-        ];
+        $n = count($demands);
 
-        foreach ($demands as $index => $demand) {
-            // weight is the length that this demand would consume on a roll with width $rollWidth
+        // Safety fallback: if too many demands, skip DP and use greedy
+        if ($n > 200) {
+            return $this->greedyPackDemands($demands, $capacity, $rollWidth);
+        }
+
+        $weights = [];
+        foreach ($demands as $demand) {
             $demandLengthForRoll = ((float) $demand['used_area']) / $rollWidth;
-            $weight = (int) round($demandLengthForRoll * 100);
-            $snapshot = $states;
+            $weights[] = (int) round($demandLengthForRoll * 100);
+        }
 
-            foreach ($snapshot as $sum => $selectedIndexes) {
-                $newSum = $sum + $weight;
-                if ($newSum > $capacity || isset($states[$newSum])) {
-                    continue;
+        // Predecessor tracking: memory O(capacity) instead of O(capacity * n)
+        $prevSum = array_fill(0, $capacity + 1, -1);
+        $prevIdx = array_fill(0, $capacity + 1, -1);
+        $reachable = array_fill(0, $capacity + 1, false);
+        $reachable[0] = true;
+
+        for ($i = 0; $i < $n; $i++) {
+            $w = $weights[$i];
+            if ($w <= 0) {
+                continue;
+            }
+            // iterate backward for 0/1 knapsack
+            for ($s = $capacity - $w; $s >= 0; $s--) {
+                if ($reachable[$s] && ! $reachable[$s + $w]) {
+                    $reachable[$s + $w] = true;
+                    $prevSum[$s + $w] = $s;
+                    $prevIdx[$s + $w] = $i;
                 }
-
-                $states[$newSum] = [...$selectedIndexes, $index];
             }
         }
 
         $bestFill = 0;
-        for ($sum = $capacity; $sum >= 0; $sum--) {
-            if (isset($states[$sum])) {
-                $bestFill = $sum;
+        for ($s = $capacity; $s >= 0; $s--) {
+            if ($reachable[$s]) {
+                $bestFill = $s;
                 break;
             }
         }
 
+        // Reconstruct selected indexes by tracing back predecessors
+        $selectedIndexes = [];
+        $s = $bestFill;
+        while ($s > 0 && $prevIdx[$s] !== -1) {
+            $selectedIndexes[] = $prevIdx[$s];
+            $s = $prevSum[$s];
+        }
+
         return [
             'best_fill_length' => $bestFill / 100,
-            'selected_indexes' => $states[$bestFill] ?? [],
+            'selected_indexes' => array_reverse($selectedIndexes),
+        ];
+    }
+
+    /**
+     * Greedy fallback when there are too many demands for DP.
+     */
+    private function greedyPackDemands(array $demands, int $capacity, float $rollWidth = self::ROLL_WIDTH): array
+    {
+        // Sort by weight descending (best fit for roll capacity)
+        $indexedDemands = [];
+        foreach ($demands as $index => $demand) {
+            $demandLengthForRoll = ((float) $demand['used_area']) / $rollWidth;
+            $indexedDemands[] = [
+                'index' => $index,
+                'weight' => (int) round($demandLengthForRoll * 100),
+            ];
+        }
+
+        usort($indexedDemands, fn($a, $b) => $b['weight'] <=> $a['weight']);
+
+        $selectedIndexes = [];
+        $currentSum = 0;
+
+        foreach ($indexedDemands as $item) {
+            if ($item['weight'] <= 0) {
+                $selectedIndexes[] = $item['index'];
+                continue;
+            }
+            if ($currentSum + $item['weight'] <= $capacity) {
+                $selectedIndexes[] = $item['index'];
+                $currentSum += $item['weight'];
+            }
+        }
+
+        return [
+            'best_fill_length' => $currentSum / 100,
+            'selected_indexes' => $selectedIndexes,
         ];
     }
 

@@ -38,6 +38,20 @@
                         @enderror
                     </div>
 
+                    {{-- Berat --}}
+                    <div>
+                        <label for="weight_per_m2" class="block text-sm font-medium text-gray-700 mb-1">Berat per m²
+                            (kg)</label>
+                        <input type="number" id="weight_per_m2" name="weight_per_m2"
+                            value="{{ old('weight_per_m2', $product->weight_per_m2) }}"
+                            min="0" step="0.0001" placeholder="Contoh: 0.4500"
+                            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition @error('weight_per_m2') border-red-500 @enderror">
+                        <p class="text-xs text-gray-400 mt-1">Isi jika ingin menghitung ongkir berdasarkan berat. Kosongkan jika tidak diketahui.</p>
+                        @error('weight_per_m2')
+                            <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                        @enderror
+                    </div>
+
                     {{-- Deskripsi --}}
                     <div>
                         <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>

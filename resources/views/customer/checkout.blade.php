@@ -74,9 +74,9 @@
                         <input type="hidden" id="shippingCityName" name="shipping_city_name" value="">
 
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-2">Pilih jasa pengiriman</label>
+                            {{-- <label class="block text-sm font-semibold text-slate-700 mb-2">Pilih jasa pengiriman</label> --}}
                             <div id="shippingServiceContainer">
-                                <p class="text-sm text-slate-500">Loading opsi pengiriman...</p>
+                                {{-- <p class="text-sm text-slate-500">Loading opsi pengiriman...</p> --}}
                             </div>
                             <input type="hidden" name="shipping_service_code" id="shippingServiceCode" value="">
                             <input type="hidden" name="shipping_courier" id="shippingCourier" value="">
@@ -164,6 +164,7 @@
             const shippingCostValue = document.getElementById('shippingCostValue');
             const totalLabel = document.getElementById('totalLabel');
             const subtotal = @json((float) $subtotal);
+            const totalWeightGram = @json((int) ($totalWeightGram ?? 1000));
             let currentShippingCost = 0;
             let currentShippingOptions = [];
             let searchTimeout;
@@ -360,7 +361,7 @@
                         },
                         body: JSON.stringify({
                             destination_city_id: cityId,
-                            weight: 1000,
+                            weight: totalWeightGram,
                         }),
                     });
 
