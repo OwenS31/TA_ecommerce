@@ -41,7 +41,7 @@
                     {{-- Berat --}}
                     <div>
                         <label for="weight_per_m2" class="block text-sm font-medium text-gray-700 mb-1">Berat per m²
-                            (kg)</label>
+                            (g)</label>
                         <input type="number" id="weight_per_m2" name="weight_per_m2"
                             value="{{ old('weight_per_m2', $product->weight_per_m2) }}"
                             min="0" step="0.0001" placeholder="Contoh: 0.4500"

@@ -394,22 +394,14 @@ class CuttingOptimizationController extends Controller
         }
 
         usort($rows, function ($a, $b) {
-            // Convert to ISO string to avoid Carbon overhead in comparison
-            $dateA = $a['order_date'] instanceof \Carbon\Carbon ? $a['order_date']->toDateTimeString() : (string) ($a['order_date'] ?? '');
-            $dateB = $b['order_date'] instanceof \Carbon\Carbon ? $b['order_date']->toDateTimeString() : (string) ($b['order_date'] ?? '');
-            $dateCompare = strcmp($dateB, $dateA);
-
-            if ($dateCompare !== 0) {
-                return $dateCompare;
+            // Urutkan berdasarkan priority_rank (urutan greedy) agar sesuai rekomendasi algoritma
+            $priorityCompare = ($a['priority_rank'] ?? 999999) <=> ($b['priority_rank'] ?? 999999);
+            if ($priorityCompare !== 0) {
+                return $priorityCompare;
             }
 
-            $orderCompare = ($a['order_id'] ?? 0) <=> ($b['order_id'] ?? 0);
-
-            if ($orderCompare !== 0) {
-                return $orderCompare;
-            }
-
-            return ($a['priority_rank'] ?? 999999) <=> ($b['priority_rank'] ?? 999999);
+            // Jika priority sama, urutkan berdasarkan roll_number
+            return ($a['roll_number'] ?? 0) <=> ($b['roll_number'] ?? 0);
         });
 
         foreach ($rows as $index => &$row) {

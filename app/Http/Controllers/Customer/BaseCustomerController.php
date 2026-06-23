@@ -116,7 +116,7 @@ abstract class BaseCustomerController extends Controller
                 $weightPerM2 = (float) $product->weight_per_m2;
                 $length = (float) ($item['length'] ?? 0);
                 $width = (float) ($item['width'] ?? 0);
-                $weightPerSheetGram = $length * $width * $weightPerM2 * 1000;
+                $weightPerSheetGram = $length * $width * $weightPerM2;
             }
             $quantity = (int) ($item['quantity'] ?? 0);
             $totalWeightGram += $weightPerSheetGram * $quantity;
@@ -152,7 +152,7 @@ abstract class BaseCustomerController extends Controller
     {
         $areaPerSheet = $length * $width;
         $subtotal = (float) $product->price_per_m2 * $areaPerSheet * $quantity;
-        $weightPerSheetGram = $areaPerSheet * (float) ($product->weight_per_m2 ?? 0) * 1000;
+        $weightPerSheetGram = $areaPerSheet * (float) ($product->weight_per_m2 ?? 0);
 
         return [
             'key' => $this->cartItemKey($product, $length, $width),

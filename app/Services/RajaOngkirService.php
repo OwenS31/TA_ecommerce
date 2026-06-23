@@ -160,6 +160,10 @@ class RajaOngkirService
         try {
             $url = $this->baseUrl . '/calculate/domestic-cost';
 
+            // Pembulatan berat ke atas ke kilogram terdekat (minimum 1 kg)
+            // Contoh: 8 gram -> 1 kg, 1200 gram -> 2 kg, 2500 gram -> 3 kg
+            $weight = max((int) ceil($weight / 1000) * 1000, 1000);
+
             $response = Http::asForm()->withHeaders([
                 'key' => $this->apiKey,
                 'Content-Type' => 'application/x-www-form-urlencoded',
