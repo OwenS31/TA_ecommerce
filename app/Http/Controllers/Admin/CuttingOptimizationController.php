@@ -40,8 +40,6 @@ class CuttingOptimizationController extends Controller
             'rolls' => $rolls,
             'recommendations' => $recommendations,
             'demandsCount' => count($demands),
-            // 'usedPercent' => $totalCapacity > 0 ? ($totalUsed / $totalCapacity) * 100 : 0,
-            // 'wastePercent' => $totalCapacity > 0 ? (($totalCapacity - $totalUsed) / $totalCapacity) * 100 : 0,
             'totalUsed' => $totalUsed,
             'totalWaste' => max(0, $totalCapacity - $totalUsed),
             'rollLength' => self::ROLL_LENGTH,

@@ -173,23 +173,35 @@
         document.querySelectorAll('.detailBtn').forEach((btn) => {
             btn.addEventListener('click', () => {
                 let roll = {};
+                let row = {};
                 try {
                     roll = JSON.parse(btn.getAttribute('data-roll') || '{}');
+                    row = JSON.parse(btn.getAttribute('data-row') || '{}');
                 } catch (err) {
                     roll = {};
+                    row = {};
                 }
 
-                const segments = roll.assignments || [];
+                const currentOrderCode = row.order_code || '';
+
+                // Hanya tampilkan assignments dari order_code yang sama dengan baris ini
+                const allAssignments = roll.assignments || [];
+                const segments = allAssignments.filter(a => (a.order_code || '') === currentOrderCode);
+
                 const viewModel = buildCuttingViewModel(segments);
 
                 let detailsHtml = '<div class="mb-2"><strong>Rincian Potongan</strong>';
-                for (const orderData of viewModel.orders) {
-                    detailsHtml +=
-                        `<div class="mt-3 border-t pt-2"><strong class="text-sm">Pesanan: ${orderData.order_code}</strong><ul class="list-disc pl-5 text-sm">`;
-                    for (const item of orderData.items) {
-                        detailsHtml += `<li>${item.sizeLabel} m sebanyak ${item.quantity} lembar</li>`;
+                if (viewModel.orders.length === 0) {
+                    detailsHtml += '<p class="text-gray-500 mt-2">Tidak ada data potongan untuk pesanan ini.</p>';
+                } else {
+                    for (const orderData of viewModel.orders) {
+                        detailsHtml +=
+                            `<div class="mt-3 border-t pt-2"><strong class="text-sm">Pesanan: ${orderData.order_code}</strong><ul class="list-disc pl-5 text-sm">`;
+                        for (const item of orderData.items) {
+                            detailsHtml += `<li>${item.sizeLabel} m sebanyak ${item.quantity} lembar</li>`;
+                        }
+                        detailsHtml += '</ul></div>';
                     }
-                    detailsHtml += '</ul></div>';
                 }
                 detailsHtml += '</div>';
 
